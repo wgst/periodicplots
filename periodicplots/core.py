@@ -280,7 +280,7 @@ def periodic_table(
         if label:
             cb.set_label(label)
 
-    _shrink_to_fit(fig, ax, name_texts, max_frac=0.94)
+    _shrink_to_fit(fig, ax, name_texts, max_frac=0.85)
 
     result = PeriodicTablePlot(fig=fig, ax=ax, mappable=mappable)
     if savepath:
