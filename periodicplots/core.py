@@ -98,10 +98,11 @@ def _resolve_norm(norm, vals):
     )
 
 
-def _shrink_to_fit(fig, ax, texts, max_frac: float = 0.94):
-    """Reduce the font size of any text wider than ``max_frac`` of one cell so
-    long element names (e.g. Praseodymium) stay inside their box.  Only shrinks,
-    never grows; silently no-ops if a renderer is unavailable."""
+def _shrink_to_fit(fig, ax, texts, max_frac: float = 0.85):
+    """Scale ALL the given texts by one shared factor so the widest of them fits
+    within ``max_frac`` of a cell.  A single factor keeps every element name the
+    same size (mixed sizes look odd); only shrinks, never grows.  No-ops if a
+    renderer is unavailable."""
     if not texts:
         return
     try:
@@ -110,10 +111,11 @@ def _shrink_to_fit(fig, ax, texts, max_frac: float = 0.94):
         x0 = ax.transData.transform((0.0, 0.0))[0]
         x1 = ax.transData.transform((1.0, 0.0))[0]
         cell_w = abs(x1 - x0) * max_frac
-        for t in texts:
-            w = t.get_window_extent(renderer).width
-            if w > cell_w:
-                t.set_fontsize(t.get_fontsize() * cell_w / w)
+        widest = max(t.get_window_extent(renderer).width for t in texts)
+        if widest > cell_w:
+            scale = cell_w / widest
+            for t in texts:
+                t.set_fontsize(t.get_fontsize() * scale)
     except Exception:
         pass
 
@@ -280,7 +282,7 @@ def periodic_table(
         if label:
             cb.set_label(label)
 
-    _shrink_to_fit(fig, ax, name_texts, max_frac=0.85)
+    _shrink_to_fit(fig, ax, name_texts)
 
     result = PeriodicTablePlot(fig=fig, ax=ax, mappable=mappable)
     if savepath:
