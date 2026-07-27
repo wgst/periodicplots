@@ -129,6 +129,7 @@ def periodic_table(
     edge_width: float = 0.9,
     text_color: str = "auto",
     fblock_labels: bool = True,
+    show_group_period: bool = False,
     # colourbar
     colorbar: bool = True,
     cbar_kw: Optional[dict] = None,
@@ -165,6 +166,8 @@ def periodic_table(
     show_number, show_mass, show_name :
         Optionally print the atomic number, atomic mass and full element name
         in each cell (all off by default).
+    show_group_period :
+        Label the groups (1-18) across the top and periods (1-7) down the left.
     savepath :
         If given, save the figure there (format inferred from the extension);
         extra ``**savefig_kw`` are forwarded to ``savefig``.
@@ -226,8 +229,19 @@ def periodic_table(
             ax.text(_FCOL - 1.15, row, lab, ha="center", va="center",
                     fontsize=6.5, color="0.4", style="italic")
 
-    ax.set_xlim(-0.3, 19)
-    ax.set_ylim(10.4, 0.3)                        # row 1 at the top
+    # optional group (1-18, across the top) and period (1-7, down the left) labels
+    if show_group_period:
+        for g in range(1, 19):
+            ax.text(g, 0.02, str(g), ha="center", va="center",
+                    fontsize=7.0, color="0.45")
+        for p in range(1, 8):
+            ax.text(0.05, p, str(p), ha="center", va="center",
+                    fontsize=7.0, color="0.45")
+
+    xlo = -0.75 if show_group_period else -0.3
+    ytop = -0.35 if show_group_period else 0.3
+    ax.set_xlim(xlo, 19)
+    ax.set_ylim(10.4, ytop)                       # row 1 at the top
     ax.set_aspect("auto")
     ax.axis("off")
 

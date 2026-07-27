@@ -88,6 +88,7 @@ fig.savefig("panel.pdf", bbox_inches="tight")    # no quality loss
 | `ax` | `None` | draw into an existing axes (compose) |
 | `show_value` | `True` | print the value in each cell |
 | `show_number` / `show_mass` / `show_name` | `False` | extra per-cell text |
+| `show_group_period` | `False` | label groups (1–18) and periods (1–7) |
 | `draw_missing` | `True` | draw elements without a value in `missing_color` |
 | `colorbar` | `True` | attach a colourbar |
 | `savepath` | `None` | save the figure (extension picks the format) |

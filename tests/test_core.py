@@ -55,3 +55,10 @@ def test_save(tmp_path):
     out = tmp_path / "t.pdf"
     pp.periodic_table({"Fe": 1.0}, savepath=str(out))
     assert out.exists() and out.stat().st_size > 0
+
+
+def test_group_period_labels():
+    r = pp.periodic_table({"Fe": 1.0}, show_group_period=True, colorbar=False)
+    texts = {t.get_text() for t in r.ax.texts}
+    assert {"1", "18", "7"}.issubset(texts)      # group + period labels present
+    plt.close(r.fig)
