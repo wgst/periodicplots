@@ -1,0 +1,35 @@
+[build-system]
+requires = ["setuptools>=64"]
+build-backend = "setuptools.build_meta"
+
+[project]
+name = "periodicplots"
+version = "0.1.0"
+description = "Vector periodic-table heatmaps in matplotlib (composable, no heavy deps)."
+readme = "README.md"
+requires-python = ">=3.8"
+license = { text = "MIT" }
+authors = [{ name = "W. Stark", email = "wch.stark@gmail.com" }]
+keywords = ["periodic table", "matplotlib", "heatmap", "chemistry", "materials", "visualization"]
+classifiers = [
+    "Programming Language :: Python :: 3",
+    "License :: OSI Approved :: MIT License",
+    "Operating System :: OS Independent",
+    "Intended Audience :: Science/Research",
+    "Topic :: Scientific/Engineering :: Chemistry",
+    "Topic :: Scientific/Engineering :: Visualization",
+]
+dependencies = [
+    "matplotlib>=3.4",
+    "numpy",
+]
+
+[project.optional-dependencies]
+dev = ["pytest", "pandas"]
+
+[project.urls]
+Homepage = "https://github.com/wgst/periodicplots"
+Issues = "https://github.com/wgst/periodicplots/issues"
+
+[tool.setuptools]
+packages = ["periodicplots"]
