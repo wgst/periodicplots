@@ -114,6 +114,7 @@ def periodic_table(
     cmap: Union[str, Colormap] = "viridis",
     norm=None,
     value_fmt: str = "{:.2f}",
+    mass_fmt: str = "{:.0f}",
     label: Optional[str] = None,
     ax: Optional[Axes] = None,
     # optional per-cell text (all off by default -> matches the reference look)
@@ -202,21 +203,17 @@ def periodic_table(
                                edgecolor=edge_color, linewidth=edge_width))
         tc = _auto_text_color(fc, has) if text_color == "auto" else text_color
 
-        # Vertical layout inside the cell.  Atomic number / mass live in the top
-        # corners; the symbol only rises toward the top when those corners are
-        # empty, otherwise it stays lower so nothing overlaps.  Value sits below
-        # the symbol; name is pinned to the bottom.
+        # Vertical layout inside the cell.  Atomic number / mass sit in the top
+        # corners (narrow, so they don't reach the centre); the symbol keeps its
+        # natural height, with the value below it and the name pinned to the
+        # bottom when shown.
         want_value = show_value and has
-        top_used = show_number or show_mass
         if show_name:
-            if want_value:
-                sym_dy, value_dy = (-0.02 if top_used else -0.12), 0.20
-            else:
-                sym_dy, value_dy = (0.06 if top_used else 0.0), None
+            sym_dy, value_dy = (-0.14, 0.16) if want_value else (-0.06, None)
         elif want_value:
-            sym_dy, value_dy = (0.04 if top_used else -0.18), (0.30 if top_used else 0.27)
+            sym_dy, value_dy = -0.18, 0.27
         else:
-            sym_dy, value_dy = (0.02 if top_used else 0.0), None
+            sym_dy, value_dy = 0.0, None
 
         if show_symbol:
             ax.text(c, r + sym_dy, sym, ha="center", va="center",
@@ -228,7 +225,7 @@ def periodic_table(
             ax.text(c - 0.44, r - 0.44, str(Z), ha="left", va="top",
                     fontsize=number_fontsize, color=tc)
         if show_mass:
-            ax.text(c + 0.44, r - 0.44, f"{mass:.2f}", ha="right", va="top",
+            ax.text(c + 0.44, r - 0.44, mass_fmt.format(mass), ha="right", va="top",
                     fontsize=mass_fontsize, color=tc)
         if show_name:
             ax.text(c, r + 0.45, name, ha="center", va="bottom",
