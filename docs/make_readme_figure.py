@@ -28,12 +28,10 @@ electronegativity = {
 pp.periodic_table(electronegativity, label="Pauling electronegativity",
                   figsize=(10, 5.4), savepath="example.png", dpi=200)
 
-# diverging example (property defined for a subset)
-slope = {"H": -0.77, "Li": -0.27, "Be": -0.60, "B": -0.47, "C": -0.43, "N": -0.46,
-         "O": -0.36, "F": -0.36, "Na": -0.45, "Al": -0.56, "Si": -0.45, "Cl": -0.28,
-         "K": -0.39, "Ga": -0.52, "Ge": -0.44, "Cu": -0.16, "Zn": -0.46, "Ag": -0.22,
-         "In": -0.41, "Ce": -0.17, "Gd": -0.34}
-pp.periodic_table(slope, cmap="RdBu_r", norm="diverging", figsize=(10, 5.4),
-                  label="mean d$E_g$/dT (meV/K)", value_fmt="{:+.2f}",
+# diverging example: electronegativity relative to the metal/non-metal boundary
+# (chi - 2 on the Pauling scale) -> metals go blue, non-metals red, centred at 0
+diverging = {s: round(chi - 2.0, 2) for s, chi in electronegativity.items()}
+pp.periodic_table(diverging, cmap="RdBu_r", norm="diverging", figsize=(10, 5.4),
+                  label="electronegativity $-$ 2  (Pauling)", value_fmt="{:+.1f}",
                   savepath="example_diverging.png", dpi=200)
 print("wrote docs/example.png (electronegativity) + docs/example_diverging.png")

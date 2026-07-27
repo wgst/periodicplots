@@ -48,8 +48,8 @@ pp.periodic_table([26, 8], [0.9, 2.7])       # parallel sequences (Z or symbol)
 ### Diverging property (centred at 0)
 
 ```python
-pp.periodic_table(slopes, cmap="RdBu_r", norm="diverging",
-                  label="d$E_g$/dT (meV/K)")
+pp.periodic_table(values, cmap="RdBu_r", norm="diverging",
+                  label="electronegativity $-$ 2")
 ```
 
 ![diverging example](docs/example_diverging.png)
