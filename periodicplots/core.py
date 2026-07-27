@@ -202,12 +202,22 @@ def periodic_table(
                                edgecolor=edge_color, linewidth=edge_width))
         tc = _auto_text_color(fc, has) if text_color == "auto" else text_color
 
-        # vertical layout inside the cell: symbol (a touch above centre when a
-        # value sits beneath it), value below, optional name pinned to the bottom
-        # (the value moves up to make room so the two never collide)
+        # Vertical layout inside the cell.  Atomic number / mass live in the top
+        # corners; the symbol only rises toward the top when those corners are
+        # empty, otherwise it stays lower so nothing overlaps.  Value sits below
+        # the symbol; name is pinned to the bottom.
         want_value = show_value and has
-        sym_dy = -0.18 if (want_value or show_name) else 0.0
-        value_dy = 0.08 if show_name else 0.27
+        top_used = show_number or show_mass
+        if show_name:
+            if want_value:
+                sym_dy, value_dy = (-0.02 if top_used else -0.12), 0.20
+            else:
+                sym_dy, value_dy = (0.06 if top_used else 0.0), None
+        elif want_value:
+            sym_dy, value_dy = (0.04 if top_used else -0.18), (0.30 if top_used else 0.27)
+        else:
+            sym_dy, value_dy = (0.02 if top_used else 0.0), None
+
         if show_symbol:
             ax.text(c, r + sym_dy, sym, ha="center", va="center",
                     fontsize=symbol_fontsize, fontweight="bold", color=tc)
@@ -215,10 +225,10 @@ def periodic_table(
             ax.text(c, r + value_dy, value_fmt.format(vd[Z]), ha="center",
                     va="center", fontsize=value_fontsize, color=tc)
         if show_number:
-            ax.text(c - 0.44, r - 0.42, str(Z), ha="left", va="top",
+            ax.text(c - 0.44, r - 0.44, str(Z), ha="left", va="top",
                     fontsize=number_fontsize, color=tc)
         if show_mass:
-            ax.text(c + 0.44, r - 0.42, f"{mass:.2f}", ha="right", va="top",
+            ax.text(c + 0.44, r - 0.44, f"{mass:.2f}", ha="right", va="top",
                     fontsize=mass_fontsize, color=tc)
         if show_name:
             ax.text(c, r + 0.45, name, ha="center", va="bottom",
