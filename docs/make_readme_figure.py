@@ -1,14 +1,31 @@
 """Generate the README images.
 
-Hero: atomic mass for ALL 118 elements (data bundled with the package, so the
-whole table is coloured).  Second: a diverging example.
+Hero: Pauling electronegativity (the classic periodic trend).  Values are the
+standard Pauling scale (as tabulated in pymatgen); the 18 elements without a
+defined Pauling value (noble gases, superheavy synthetics) are left blank.
+Second image: a diverging example.
 """
 import periodicplots as pp
-from periodicplots import ELEMENTS
 
-# {Z: atomic mass} for every element -> the full table is filled
-mass = {Z: meta[2] for Z, meta in ELEMENTS.items()}
-pp.periodic_table(mass, label="atomic mass (u)", value_fmt="{:.0f}",
+# Pauling electronegativity (standard values)
+electronegativity = {
+    "H": 2.2, "Li": 0.98, "Be": 1.57, "B": 2.04, "C": 2.55, "N": 3.04, "O": 3.44,
+    "F": 3.98, "Na": 0.93, "Mg": 1.31, "Al": 1.61, "Si": 1.9, "P": 2.19, "S": 2.58,
+    "Cl": 3.16, "K": 0.82, "Ca": 1.0, "Sc": 1.36, "Ti": 1.54, "V": 1.63, "Cr": 1.66,
+    "Mn": 1.55, "Fe": 1.83, "Co": 1.88, "Ni": 1.91, "Cu": 1.9, "Zn": 1.65, "Ga": 1.81,
+    "Ge": 2.01, "As": 2.18, "Se": 2.55, "Br": 2.96, "Kr": 3.0, "Rb": 0.82, "Sr": 0.95,
+    "Y": 1.22, "Zr": 1.33, "Nb": 1.6, "Mo": 2.16, "Tc": 1.9, "Ru": 2.2, "Rh": 2.28,
+    "Pd": 2.2, "Ag": 1.93, "Cd": 1.69, "In": 1.78, "Sn": 1.96, "Sb": 2.05, "Te": 2.1,
+    "I": 2.66, "Xe": 2.6, "Cs": 0.79, "Ba": 0.89, "La": 1.1, "Ce": 1.12, "Pr": 1.13,
+    "Nd": 1.14, "Pm": 1.13, "Sm": 1.17, "Eu": 1.2, "Gd": 1.2, "Tb": 1.1, "Dy": 1.22,
+    "Ho": 1.23, "Er": 1.24, "Tm": 1.25, "Yb": 1.1, "Lu": 1.27, "Hf": 1.3, "Ta": 1.5,
+    "W": 2.36, "Re": 1.9, "Os": 2.2, "Ir": 2.2, "Pt": 2.28, "Au": 2.54, "Hg": 2.0,
+    "Tl": 1.62, "Pb": 2.33, "Bi": 2.02, "Po": 2.0, "At": 2.2, "Rn": 2.2, "Fr": 0.7,
+    "Ra": 0.9, "Ac": 1.1, "Th": 1.3, "Pa": 1.5, "U": 1.38, "Np": 1.36, "Pu": 1.28,
+    "Am": 1.3, "Cm": 1.3, "Bk": 1.3, "Cf": 1.3, "Es": 1.3, "Fm": 1.3, "Md": 1.3,
+    "No": 1.3, "Lr": 1.3,
+}
+pp.periodic_table(electronegativity, label="Pauling electronegativity",
                   figsize=(10, 5.4), savepath="example.png", dpi=200)
 
 # diverging example (property defined for a subset)
@@ -19,4 +36,4 @@ slope = {"H": -0.77, "Li": -0.27, "Be": -0.60, "B": -0.47, "C": -0.43, "N": -0.4
 pp.periodic_table(slope, cmap="RdBu_r", norm="diverging", figsize=(10, 5.4),
                   label="mean d$E_g$/dT (meV/K)", value_fmt="{:+.2f}",
                   savepath="example_diverging.png", dpi=200)
-print("wrote docs/example.png (all elements) + docs/example_diverging.png")
+print("wrote docs/example.png (electronegativity) + docs/example_diverging.png")
