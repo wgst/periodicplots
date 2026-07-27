@@ -98,6 +98,26 @@ def _resolve_norm(norm, vals):
     )
 
 
+def _shrink_to_fit(fig, ax, texts, max_frac: float = 0.94):
+    """Reduce the font size of any text wider than ``max_frac`` of one cell so
+    long element names (e.g. Praseodymium) stay inside their box.  Only shrinks,
+    never grows; silently no-ops if a renderer is unavailable."""
+    if not texts:
+        return
+    try:
+        fig.canvas.draw()
+        renderer = fig.canvas.get_renderer()
+        x0 = ax.transData.transform((0.0, 0.0))[0]
+        x1 = ax.transData.transform((1.0, 0.0))[0]
+        cell_w = abs(x1 - x0) * max_frac
+        for t in texts:
+            w = t.get_window_extent(renderer).width
+            if w > cell_w:
+                t.set_fontsize(t.get_fontsize() * cell_w / w)
+    except Exception:
+        pass
+
+
 def _auto_text_color(facecolor, has_value: bool) -> str:
     if not has_value:
         return "0.45"                            # greyed symbol on the empty cell
@@ -193,6 +213,7 @@ def periodic_table(
     else:
         fig = ax.figure
 
+    name_texts = []                              # collected for auto-shrink-to-fit
     for Z, (sym, name, mass, grp, per) in ELEMENTS.items():
         has = Z in vd
         if not has and not draw_missing:
@@ -228,8 +249,8 @@ def periodic_table(
             ax.text(c + 0.44, r - 0.44, mass_fmt.format(mass), ha="right", va="top",
                     fontsize=mass_fontsize, color=tc)
         if show_name:
-            ax.text(c, r + 0.45, name, ha="center", va="bottom",
-                    fontsize=name_fontsize, color=tc)
+            name_texts.append(ax.text(c, r + 0.45, name, ha="center", va="bottom",
+                                      fontsize=name_fontsize, color=tc))
 
     if fblock_labels:
         for row, lab in ((_LANTH_ROW, "La-Lu"), (_ACT_ROW, "Ac-Lr")):
@@ -258,6 +279,8 @@ def periodic_table(
         cb = fig.colorbar(mappable, ax=ax, **kw)
         if label:
             cb.set_label(label)
+
+    _shrink_to_fit(fig, ax, name_texts, max_frac=0.94)
 
     result = PeriodicTablePlot(fig=fig, ax=ax, mappable=mappable)
     if savepath:
