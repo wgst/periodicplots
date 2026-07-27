@@ -3,8 +3,7 @@
 Vector periodic-table heatmaps in **matplotlib**.
 
 Colour each element by any property and get a clean, publication-quality
-periodic table. Every cell is a matplotlib `Rectangle` + text — **no
-rasterisation** — so the output stays fully vector (crisp PDF/SVG) and drops
+periodic table. Every cell is a matplotlib `Rectangle` + text so the output stays fully vector (crisp PDF/SVG) and drops
 straight into multi-panel figures via an `ax=` argument.
 
 ![periodicplots example](docs/example.png)
@@ -90,6 +89,7 @@ fig.savefig("panel.pdf", bbox_inches="tight")    # no quality loss
 | `show_number` / `show_mass` / `show_name` | `False` | extra per-cell text |
 | `show_group_period` | `False` | label groups (1–18) and periods (1–7) |
 | `draw_missing` | `True` | draw elements without a value in `missing_color` |
+| `max_z` | `118` | highest atomic number to draw (e.g. `103` to omit superheavies) |
 | `colorbar` | `True` | attach a colourbar |
 | `savepath` | `None` | save the figure (extension picks the format) |
 

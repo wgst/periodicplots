@@ -57,6 +57,13 @@ def test_save(tmp_path):
     assert out.exists() and out.stat().st_size > 0
 
 
+def test_max_z_omits_superheavies():
+    r = pp.periodic_table({"Fe": 1.0, "U": 2.0}, max_z=103, colorbar=False)
+    syms = {t.get_text() for t in r.ax.texts}
+    assert "U" in syms and "Rf" not in syms and "Og" not in syms
+    plt.close(r.fig)
+
+
 def test_group_period_labels():
     r = pp.periodic_table({"Fe": 1.0}, show_group_period=True, colorbar=False)
     texts = {t.get_text() for t in r.ax.texts}

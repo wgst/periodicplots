@@ -148,6 +148,7 @@ def periodic_table(
     # cell appearance
     missing_color="0.92",
     draw_missing: bool = True,
+    max_z: int = 118,
     edge_color="black",
     edge_width: float = 0.9,
     text_color: str = "auto",
@@ -217,6 +218,8 @@ def periodic_table(
 
     name_texts = []                              # collected for auto-shrink-to-fit
     for Z, (sym, name, mass, grp, per) in ELEMENTS.items():
+        if Z > max_z:                            # e.g. drop the superheavies
+            continue
         has = Z in vd
         if not has and not draw_missing:
             continue
