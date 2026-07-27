@@ -7,6 +7,8 @@ periodic table. Every cell is a matplotlib `Rectangle` + text — **no
 rasterisation** — so the output stays fully vector (crisp PDF/SVG) and drops
 straight into multi-panel figures via an `ax=` argument.
 
+![periodicplots example](docs/example.png)
+
 - 🎨 any matplotlib colormap; sequential, or symmetric **diverging** about 0
 - 🧩 **composable** — draw into your own axes, keep vector quality
 - 🪶 lightweight — only `matplotlib` + `numpy` (element data is bundled, no `pymatgen`)
@@ -50,6 +52,8 @@ pp.periodic_table([26, 8], [0.9, 2.7])       # parallel sequences (Z or symbol)
 pp.periodic_table(slopes, cmap="RdBu_r", norm="diverging",
                   label="d$E_g$/dT (meV/K)")
 ```
+
+![diverging example](docs/example_diverging.png)
 
 ### Optional atomic number / mass / name
 
