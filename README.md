@@ -52,8 +52,6 @@ pp.periodic_table(values, cmap="RdBu_r", norm="diverging",
                   label="electronegativity $-$ 2")
 ```
 
-![diverging example](docs/example_diverging.png)
-
 ### Optional atomic number / mass / name
 
 ```python

@@ -1,9 +1,7 @@
-"""Generate the README images.
-
-Hero: Pauling electronegativity (the classic periodic trend).  Values are the
-standard Pauling scale (as tabulated in pymatgen); the 18 elements without a
-defined Pauling value (noble gases, superheavy synthetics) are left blank.
-Second image: a diverging example.
+"""Generate the README hero image: Pauling electronegativity (the classic
+periodic trend).  Values are the standard Pauling scale (as tabulated in
+pymatgen); the 18 elements without a defined Pauling value (noble gases,
+superheavy synthetics) are left blank.
 """
 import periodicplots as pp
 
@@ -27,11 +25,4 @@ electronegativity = {
 }
 pp.periodic_table(electronegativity, label="Pauling electronegativity",
                   figsize=(10, 5.4), savepath="example.png", dpi=200)
-
-# diverging example: electronegativity relative to the metal/non-metal boundary
-# (chi - 2 on the Pauling scale) -> metals go blue, non-metals red, centred at 0
-diverging = {s: round(chi - 2.0, 2) for s, chi in electronegativity.items()}
-pp.periodic_table(diverging, cmap="RdBu_r", norm="diverging", figsize=(10, 5.4),
-                  label="electronegativity $-$ 2  (Pauling)", value_fmt="{:+.1f}",
-                  savepath="example_diverging.png", dpi=200)
-print("wrote docs/example.png (electronegativity) + docs/example_diverging.png")
+print("wrote docs/example.png (electronegativity)")
