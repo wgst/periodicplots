@@ -286,11 +286,18 @@ def test_all_optional_fields_draw_on_the_surface():
 
 
 def test_save_is_vector(tmp_path):
+    # the table itself is pure vector -- with no colourbar the PDF holds no
+    # images at all.  The colourbar gradient is the one raster matplotlib
+    # emits (plus a soft mask, since the bar is clipped to its rounded frame),
+    # so count against the bare figure rather than a magic number.
+    bare = tmp_path / "bare.pdf"
+    periodic_table_relief({"Fe": 1.0, "O": 2.0}, savepath=str(bare),
+                          colorbar=False)
+    assert bare.exists() and bare.stat().st_size > 0
+    assert b"/Subtype /Image" not in bare.read_bytes()
     out = tmp_path / "relief.pdf"
     periodic_table_relief({"Fe": 1.0, "O": 2.0}, savepath=str(out))
     assert out.exists() and out.stat().st_size > 0
-    assert b"/Subtype /Image" not in out.read_bytes().replace(
-        b"/Subtype /Image", b"", 1)                          # only the colourbar
 
 
 def test_shade_and_mix():
@@ -339,3 +346,20 @@ def test_each_style_keeps_its_own_relief_height_default():
         _rel._draw_block = orig
     plt.close(r.fig)
     assert max(seen.values()) == pytest.approx(1.0)      # flat default
+
+
+def test_flat_without_data_says_so_clearly():
+    # "3d" has a no-data (chemical-family) mode, "flat" does not -- it used to
+    # fail deep inside _value_dict with a TypeError naming the wrong function
+    with pytest.raises(ValueError, match='tile_style="flat" needs data'):
+        pp.periodic_table_3d(tile_style="flat")
+    pp.periodic_table_3d()                       # "3d" still fine with no data
+    plt.close("all")
+
+
+def test_version_is_consistent():
+    import tomllib
+    from pathlib import Path
+    root = Path(__file__).resolve().parent.parent
+    meta = tomllib.loads((root / "pyproject.toml").read_text())
+    assert pp.__version__ == meta["project"]["version"]

@@ -1,9 +1,10 @@
 """Vector periodic-table heatmaps in matplotlib.
 
 The single entry point is :func:`periodic_table`.  It draws each element as a
-matplotlib patch (a rounded rectangle by default) + text, with no
-rasterisation, so the result is fully vector and composes into multi-panel
-figures via the ``ax=`` argument.
+matplotlib patch (a rounded rectangle by default) + text, so the table is pure
+vector and composes into multi-panel figures via the ``ax=`` argument.  The
+optional ``tile_style="3d"`` finish is the one exception: its drop shadows and
+gloss are small rasters, which PDF/SVG embed alongside the vector artwork.
 
 Default appearance: element symbol (bold) with the value beneath it, a viridis
 heatmap, a slim colourbar and detached La-Lu / Ac-Lr f-block rows.  Atomic
@@ -121,6 +122,121 @@ def _shrink_to_fit(fig, ax, texts, max_frac: float = 0.85):
         pass
 
 
+# The empty block between Be and B, in (column, row) units -- where the "gap"
+# colourbar lies.  Every renderer leaves this region free, so it is the one
+# placement they can all share.
+_GAP_BAND = (2.75, 11.85, 1.78)                  # x0, x1, centre row
+# Bar thickness, in cell WIDTHS -- nothing foreshortens those, so the bar comes
+# out the same weight whatever projection the renderer draws in.
+_GAP_THICKNESS = 0.34
+_CBAR_LOCS = ("gap", "right", "left", "top", "bottom")
+
+
+# Corner radius of the colourbar frame, as a fraction of the bar's short side.
+# Chosen so the bar's corners read like the tiles' own.
+_CBAR_ROUNDING = {"round": 0.22, "square": 0.06}
+
+
+# Colourbar text, as a fraction of one cell -- so the bar reads the same on a
+# small panel and a full-page figure, whatever the renderer's default figsize.
+_CBAR_TICK_FRAC, _CBAR_TITLE_FRAC = 0.34, 0.39
+
+
+def _frame_colorbar(fig, ax, cb, cax, shape, font_scale=1.0):
+    """Style the bar like the table it belongs to: an element-tile frame (same
+    corner geometry, same thin tinted edge, gradient clipped to it, matplotlib's
+    rectangular outline hidden), and text sized from the cell rather than in
+    fixed points.  Needs the settled box, so it no-ops without a renderer."""
+    try:
+        fig.canvas.draw()
+        pt = 72.0 / fig.dpi
+        cell = abs(ax.transData.transform((1, 0))[0]
+                   - ax.transData.transform((0, 0))[0]) * pt
+        cb.ax.tick_params(labelsize=_CBAR_TICK_FRAC * cell * font_scale,
+                          length=0.10 * cell * font_scale, color="0.25")
+        for axis in (cb.ax.xaxis, cb.ax.yaxis):
+            axis.label.set_size(_CBAR_TITLE_FRAC * cell * font_scale)
+        bb = cax.get_window_extent()
+        w, h = float(bb.width), float(bb.height)
+        if not (w > 0 and h > 0):
+            return
+        r = _CBAR_ROUNDING[shape] * min(w, h)
+        frame = FancyBboxPatch(
+            (0, 0), 1, 1, transform=cax.transAxes,
+            boxstyle=f"round,pad=0,rounding_size={r / w}",
+            mutation_aspect=w / h,                # isotropic on a long thin bar
+            facecolor="none", edgecolor="0.25", linewidth=0.5,
+            clip_on=False, zorder=5)
+        cax.add_patch(frame)
+        if cb.solids is not None:
+            cb.solids.set_clip_path(frame)
+        cb.outline.set_visible(False)
+        cb.ax.tick_params(color="0.25")
+    except Exception:
+        pass
+
+
+def _add_colorbar(fig, ax, mappable, *, loc="gap", label=None, cbar_kw=None,
+                  project=None, shape="round", font_scale=1.0):
+    """Attach the colourbar in one of :data:`_CBAR_LOCS` and return it.
+
+    ``"gap"`` lays a horizontal bar inside the empty Be-B block, as an inset
+    axes positioned in DATA coordinates -- so it follows whatever projection
+    the caller draws in.  ``project`` maps a ``(column, row)`` of the plain
+    table onto the data coordinates actually used (identity when omitted);
+    Every other location is matplotlib's own ``fig.colorbar(location=...)``.
+    Either way the bar is framed like an element tile, ``shape`` matching the
+    table's ``tile_shape``, and its text is sized from the cell so every
+    renderer's bar reads alike; ``font_scale`` scales that text.
+    """
+    if shape not in _CBAR_ROUNDING:
+        raise ValueError(
+            f"cbar_shape must be 'round' or 'square', got {shape!r}")
+    if loc not in _CBAR_LOCS:
+        raise ValueError(
+            f"cbar_loc must be one of {_CBAR_LOCS}, got {loc!r}")
+    kw = dict(cbar_kw or {})
+    if loc == "gap":
+        x0, x1, rc = _GAP_BAND
+        P = project or (lambda x, y: (x, y))
+
+        def tofrac(x, y):                        # data -> axes fraction
+            return ax.transAxes.inverted().transform(ax.transData.transform(P(x, y)))
+
+        # The band's ENDS follow the projection, so the bar sits in the gap and
+        # leans with the table.  Its THICKNESS does not: a projection squashes
+        # rows (by 1 - tilt, or by depth), which would leave the bar visibly
+        # thinner in the tipped views than on the flat table.
+        e0, e1 = tofrac(x0, rc), tofrac(x1, rc)  # the two ends, at mid-band
+        half = _GAP_THICKNESS / 2.0
+        try:
+            fig.canvas.draw()
+            cw = abs(ax.transData.transform((1, 0))[0]
+                     - ax.transData.transform((0, 0))[0])
+            h = _GAP_THICKNESS * cw / ax.get_window_extent().height
+        except Exception:                        # no renderer: fall back to rows
+            h = abs(tofrac(x0, rc + half)[1] - tofrac(x0, rc - half)[1])
+        cax = ax.inset_axes([min(e0[0], e1[0]), (e0[1] + e1[1]) / 2.0 - h / 2.0,
+                             abs(e1[0] - e0[0]), h])
+        kw.setdefault("orientation", "horizontal")
+        cb = fig.colorbar(mappable, cax=cax, **kw)
+        cax.xaxis.set_ticks_position("top")      # ticks, labels and title above
+        cax.xaxis.set_label_position("top")
+        if label:
+            cb.set_label(label)
+    else:
+        cax = None
+        kw.setdefault("fraction", 0.020)
+        kw.setdefault("pad", 0.008)
+        kw.setdefault("shrink", 0.92)
+        kw.setdefault("location", loc)
+        cb = fig.colorbar(mappable, ax=ax, **kw)
+        if label:
+            cb.set_label(label)
+    _frame_colorbar(fig, ax, cb, cb.ax, shape, font_scale)
+    return cb
+
+
 def _auto_text_color(facecolor, has_value: bool) -> str:
     if not has_value:
         return "0.45"                            # greyed symbol on the empty cell
@@ -159,6 +275,8 @@ def periodic_table(
     show_group_period: bool = False,
     # colourbar
     colorbar: bool = True,
+    cbar_loc: str = "gap",
+    cbar_shape: Optional[str] = None,
     cbar_kw: Optional[dict] = None,
     # font sizes (points)
     symbol_fontsize: float = 8.6,
@@ -188,6 +306,13 @@ def periodic_table(
         Format string for the value printed in each cell.
     label_cbar :
         Colourbar label.
+    cbar_loc :
+        Where the colourbar goes: ``"gap"`` (default) lays it horizontally in
+        the empty block between Be and B; ``"right"``, ``"left"``, ``"top"``
+        and ``"bottom"`` place it outside the table.  The bar is framed like an
+        element cell; ``cbar_shape`` overrides the corner geometry, which
+        otherwise follows ``tile_shape``.  ``cbar_kw`` is passed on to
+        ``fig.colorbar`` for the rest (``fraction``, ``pad``, ``shrink``).
     ax :
         Draw into an existing axes (for composing multi-panel figures).  If
         ``None`` a new figure/axes is created.
@@ -355,11 +480,8 @@ def periodic_table(
     ax.axis("off")
 
     if colorbar:
-        kw = dict(fraction=0.020, pad=0.008, shrink=0.92)
-        kw.update(cbar_kw or {})
-        cb = fig.colorbar(mappable, ax=ax, **kw)
-        if label:
-            cb.set_label(label)
+        _add_colorbar(fig, ax, mappable, loc=cbar_loc, label=label,
+                      cbar_kw=cbar_kw, shape=cbar_shape or tile_shape)
 
     _shrink_to_fit(fig, ax, name_texts)
 

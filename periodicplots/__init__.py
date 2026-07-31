@@ -40,8 +40,9 @@ def periodic_table_3d(data=None, values=None, *, tile_style="3d",
         How each block is rendered -- the same property `periodic_table` has:
         ``"3d"`` (default) — physical-looking tiles: drop shadows, lit faces.
         ``"flat"`` — flat-shaded extruded blocks drawn from plain polygons, so
-        the figure contains no rasters at all; the labels are laid *in* the
-        plane of the table.  Requires data.
+        the table itself contains no rasters; the labels are laid *in* the
+        plane of the table.  Requires data (unlike ``"3d"``, it has no
+        family-colour mode).
     tile_shape :
         Corner geometry of the ``"3d"`` tiles.  ``"round"`` (the default) is
         the glossy rounded-corner look; ``"square"`` the photographic finish:
@@ -76,4 +77,11 @@ def periodic_table_3d(data=None, values=None, *, tile_style="3d",
         return _tiles_3d(data, values,
                          style=("square" if tile_shape == "square" else "soft"),
                          **kwargs)
+    if data is None:
+        # "3d" has a no-data mode (chemical-family colours); "flat" has none,
+        # and without this it fails deep inside with a confusing TypeError
+        raise ValueError(
+            'tile_style="flat" needs data: it draws blocks whose height comes '
+            'from the value.  Call periodic_table_3d() with no data for the '
+            'chemical-family poster, or pass a mapping {element: value}.')
     return _blocks_3d(data, values, **kwargs)

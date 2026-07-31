@@ -37,6 +37,7 @@ from matplotlib.transforms import Affine2D
 from ._elements import ELEMENTS
 from .core import (
     _ACT_ROW,
+    _add_colorbar,
     _FCOL,
     _LANTH_ROW,
     PeriodicTablePlot,
@@ -285,6 +286,8 @@ def periodic_table_relief(
     show_group_period: bool = False,
     # colourbar
     colorbar: bool = True,
+    cbar_loc: str = "gap",
+    cbar_shape: Optional[str] = None,
     cbar_kw: Optional[dict] = None,
     # font sizes (points)
     symbol_fontsize: float = 8.4,
@@ -490,11 +493,12 @@ def periodic_table_relief(
     ax.axis("off")
 
     if colorbar:
-        kw = dict(fraction=0.020, pad=0.008, shrink=0.92)
-        kw.update(cbar_kw or {})
-        cb = fig.colorbar(mappable, ax=ax, **kw)
-        if label:
-            cb.set_label(label)
+        # the gap bar follows this renderer's oblique projection, so it lies in
+        # the plane of the table like everything else
+        # these blocks are sharp-cornered, so the bar is framed to match
+        _add_colorbar(fig, ax, mappable, loc=cbar_loc, label=label,
+                      cbar_kw=cbar_kw, shape=cbar_shape or "square",
+                      project=lambda x, y: (x + shear * y, y * depth))
 
     # The cell labels go on last: laying them in the plane of the table needs the
     # settled data->display scale, so the axes has to be finished first.

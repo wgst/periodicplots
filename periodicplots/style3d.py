@@ -37,8 +37,8 @@ from matplotlib.textpath import TextPath
 from matplotlib.transforms import Affine2D
 
 from ._elements import ELEMENTS
-from .core import (PeriodicTablePlot, _ACT_ROW, _FCOL, _LANTH_ROW, _cell_pos,
-                   _resolve_norm, _to_Z, _value_dict)
+from .core import (PeriodicTablePlot, _ACT_ROW, _FCOL, _LANTH_ROW,
+                   _add_colorbar, _cell_pos, _resolve_norm, _to_Z, _value_dict)
 
 # ------------------------------------------------------------------ palette
 # Colour families sampled from the reference poster: corals/pinks on the
@@ -624,6 +624,7 @@ def periodic_table_3d(
     fblock_labels: bool = False,
     colorbar: bool = True,
     cbar_loc: str = "gap",
+    cbar_shape: Optional[str] = None,
     cbar_kw: Optional[dict] = None,
     figsize=(15.0, 8.6),
     savepath: Optional[str] = None,
@@ -688,8 +689,10 @@ def periodic_table_3d(
     omit the Rf-Og superheavies).
 
     ``cbar_loc`` places the colourbar: ``"gap"`` (default) lays it
-    horizontally in the empty block between Be and B; ``"right"`` is the
-    classic vertical bar beside the table.
+    horizontally in the empty block between Be and B, following the table's
+    tilt and lean; ``"right"``, ``"left"``, ``"top"`` and ``"bottom"`` put it
+    outside the table.  The bar is framed like an element tile; ``cbar_shape``
+    overrides the corner geometry, which otherwise follows the tile finish.
 
     ``background`` draws nothing by default (the figure facecolor shows
     through); pass ``"gradient"`` for the soft pastel backdrop, ``True`` for
@@ -904,54 +907,14 @@ def periodic_table_3d(
     ax.axis("off")
 
     if value_mode and colorbar:
-        if cbar_loc == "gap":
-            # horizontal bar in the empty block between Be and B (the gap
-            # over the transition metals); placed in data coordinates so it
-            # follows the relief squash and sideways lean
-            row0, row1 = 1.42, 1.82                # vertical band (row units)
-            xg0, xg1 = 2.75, 11.85
-            ysc = (1.0 - tilt) if lift_max else 1.0
-            xsh = -side_tilt * (row0 + row1) / 2 if lift_max else 0.0
+        ysc = (1.0 - tilt) if lift_max else 1.0
+        xsh = -side_tilt if lift_max else 0.0
 
-            def tofrac(x, y):
-                return ax.transAxes.inverted().transform(
-                    ax.transData.transform((x, y)))
-
-            p0 = tofrac(xg0 + xsh, row1 * ysc)     # lower-left on screen
-            p1 = tofrac(xg1 + xsh, row0 * ysc)     # upper-right on screen
-            cax = ax.inset_axes([p0[0], p0[1], p1[0] - p0[0], p1[1] - p0[1]])
-            kw = dict(orientation="horizontal")
-            kw.update(cbar_kw or {})
-            cb = fig.colorbar(mappable, cax=cax, **kw)
-            cax.xaxis.set_ticks_position("top")    # ticks + labels above
-            cax.xaxis.set_label_position("top")    # title above as well
-            cb.ax.tick_params(labelsize=10 * font_scale,
-                              length=3.5 * font_scale, color="0.25")
-            if label:
-                cb.set_label(label, fontsize=11.5 * font_scale)
-            # frame the bar like an element box: same rounding and the same
-            # thin tinted edge, with the gradient clipped to the rounded
-            # corners (mutation_aspect makes the rounding isotropic on the
-            # long, thin bar)
-            bw, bh = xg1 - xg0, (row1 - row0) * ysc
-            frame = FancyBboxPatch(
-                (0, 0), 1, 1, transform=cax.transAxes,
-                boxstyle=f"round,pad=0,rounding_size={0.07 / bw}",
-                mutation_aspect=bw / bh, facecolor="none",
-                edgecolor="0.25",
-                linewidth=0.5, clip_on=False, zorder=5)
-            cax.add_patch(frame)
-            cb.solids.set_clip_path(frame)
-        elif cbar_loc == "right":
-            kw = dict(fraction=0.020, pad=0.008, shrink=0.85)
-            kw.update(cbar_kw or {})
-            cb = fig.colorbar(mappable, ax=ax, **kw)
-            if label:
-                cb.set_label(label)
-        else:
-            raise ValueError(
-                f"cbar_loc must be 'gap' or 'right', got {cbar_loc!r}")
-        cb.outline.set_visible(False)
+        # the gap bar follows the relief squash and sideways lean
+        cb = _add_colorbar(fig, ax, mappable, loc=cbar_loc, label=label,
+                           cbar_kw=cbar_kw, font_scale=font_scale,
+                           shape=cbar_shape or ("square" if square else "round"),
+                           project=lambda x, y: (x + xsh * y, y * ysc))
 
     result = PeriodicTablePlot(fig=fig, ax=ax, mappable=mappable)
     if savepath:

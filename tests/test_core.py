@@ -131,3 +131,56 @@ def test_tile_text_maps_onto_the_face_not_the_cell():
     assert pos(tile, "26")[0] > pos(flat, "26")[0]     # in from the left edge
     assert pos(tile, "26")[1] > pos(flat, "26")[1]     # down from the top edge
     plt.close(flat.fig), plt.close(tile.fig)
+
+
+def test_cbar_loc_is_the_same_option_in_both_functions():
+    # "gap" is the default everywhere: an inset axes inside the Be-B block,
+    # so it is a child of the table axes rather than a separate figure axes
+    for call in (lambda **k: pp.periodic_table({"Fe": 1.0, "O": 2.0}, **k),
+                 lambda **k: pp.periodic_table_3d({"Fe": 1.0, "O": 2.0}, **k),
+                 lambda **k: pp.periodic_table_3d({"Fe": 1.0, "O": 2.0},
+                                                  tile_style="flat", **k)):
+        r = call()
+        assert len(r.ax.child_axes) == 1 and len(r.fig.axes) == 1
+        band = r.ax.child_axes[0].get_position()
+        assert band.height < band.width          # a thin horizontal bar
+        plt.close(r.fig)
+        # the outside placements are matplotlib's own, on their own axes
+        for loc in ("right", "left", "top", "bottom"):
+            r = call(cbar_loc=loc)
+            assert not r.ax.child_axes and len(r.fig.axes) == 2
+            plt.close(r.fig)
+        with pytest.raises(ValueError, match="cbar_loc"):
+            call(cbar_loc="middle")
+
+
+def test_gap_colorbar_follows_the_projection():
+    # in relief the band leans and squashes with the table, so it sits in the
+    # plane rather than floating flat over it
+    flat = pp.periodic_table({"Fe": 1.0, "O": 2.0})
+    tipped = pp.periodic_table_3d({"Fe": 1.0, "O": 2.0})
+    fb = flat.ax.child_axes[0].get_position()
+    tb = tipped.ax.child_axes[0].get_position()
+    assert tb.y0 != pytest.approx(fb.y0, abs=1e-3)
+    plt.close(flat.fig), plt.close(tipped.fig)
+
+
+def test_gap_bar_is_the_same_weight_in_every_renderer():
+    # the band's ends follow each projection, but its thickness is measured
+    # against the cell WIDTH -- which nothing foreshortens -- so the bar does
+    # not come out thinner in the tipped views
+    def bar(r):
+        r.fig.canvas.draw()
+        bb = r.ax.child_axes[0].get_window_extent()
+        T = r.ax.transData
+        cw = abs(T.transform((1, 0))[0] - T.transform((0, 0))[0])
+        return bb.width / cw, bb.height / cw
+    v = {"Fe": 1.0, "O": 2.0}
+    ref = bar(pp.periodic_table(v))
+    for made in (pp.periodic_table(v, tile_style="3d"),
+                 pp.periodic_table_3d(v),
+                 pp.periodic_table_3d(v, tile_style="flat")):
+        w, h = bar(made)
+        assert w == pytest.approx(ref[0], abs=0.1)
+        assert h == pytest.approx(ref[1], abs=0.02)
+        plt.close(made.fig)

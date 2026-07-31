@@ -63,6 +63,9 @@ pp.periodic_table(slopes, cmap="RdBu_r", cmap_norm="diverging",
 | `tile_style` / `tile_shape` | `"flat"` / `"round"` | how a cell is drawn (below) |
 | `ax` | `None` | draw into an existing axes |
 | `colorbar` | `True` | attach a colourbar |
+| `cbar_loc` | `"gap"` | `"gap"` (in the empty Be–B block), `"right"`, `"left"`, `"top"`, `"bottom"` |
+| `cbar_shape` | `None` | corner geometry of the colourbar frame; follows `tile_shape` unless set |
+| `cbar_kw` | `None` | passed to `fig.colorbar` (`fraction`, `pad`, `shrink`, …) |
 | `savepath` | `None` | save the figure; the extension picks the format |
 
 ## 3D tables
@@ -83,7 +86,6 @@ pp.periodic_table_3d(values, cmap_norm="diverging", relief_signed=True)
 | `relief_signed` | `False` | measure the relief from zero, so negative values sink into a pit |
 | `relief_norm` | `None` | drive the heights from their own normalisation instead of `cmap_norm` |
 | `tilt` / `side_tilt` | `0.20` / `0.15` | how far the table tips back, and yaws sideways |
-| `cbar_loc` | `"gap"` | colourbar in the Be–B gap, or `"right"` |
 | `background` | `False` | `"gradient"` for a pastel backdrop, or any matplotlib colour |
 | `elements` | `None` | restrict which elements are drawn |
 
@@ -111,8 +113,8 @@ embed alongside the vector outlines and text. `edge_color`/`edge_width` do not
 apply to them — their outline comes from the face colour.
 
 `tile_style="flat"` draws flat-colour extruded blocks in an oblique projection
-with the labels laid in the plane of the table, so the figure contains no
-rasters at all. It adds `depth` (row pitch, `0.72`), `shear` (lateral slant,
+with the labels laid in the plane of the table, so the table itself is pure
+vector (only the colourbar gradient is a raster, as in any matplotlib figure). It adds `depth` (row pitch, `0.72`), `shear` (lateral slant,
 `-0.11`), `base_height` (`0.10`), `gap`, `wall_shade`/`side_shade`,
 `wall_fade`/`fade_color`, `pit_color`, `text_on_surface`, and `periodic_table`'s
 `edge_color`/`edge_width`/`text_color` and per-role `*_fontsize` options.
