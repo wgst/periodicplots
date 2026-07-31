@@ -358,8 +358,11 @@ def test_flat_without_data_says_so_clearly():
 
 
 def test_version_is_consistent():
-    import tomllib
+    # read the version with a regex rather than tomllib, which is 3.11+ only
+    # while the package supports older interpreters
+    import re
     from pathlib import Path
-    root = Path(__file__).resolve().parent.parent
-    meta = tomllib.loads((root / "pyproject.toml").read_text())
-    assert pp.__version__ == meta["project"]["version"]
+    txt = (Path(__file__).resolve().parent.parent / "pyproject.toml").read_text()
+    m = re.search(r'^\s*version\s*=\s*"([^"]+)"', txt, re.MULTILINE)
+    assert m, "no version in pyproject.toml"
+    assert pp.__version__ == m.group(1)

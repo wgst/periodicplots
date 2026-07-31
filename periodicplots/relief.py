@@ -384,8 +384,9 @@ def periodic_table_relief(
         # scaled so the value furthest from it reaches +/- `relief_height`.
         t_zero = _norm_frac(n, 0.0)
         if t_zero is None:
-            raise ValueError("signed=True needs a norm that can place 0 "
-                             "(e.g. norm='diverging' or a (vmin, vmax) spanning 0)")
+            raise ValueError(
+                "relief_signed=True needs a cmap_norm that can place 0 "
+                "(e.g. cmap_norm='diverging' or a (vmin, vmax) spanning 0)")
         reach = max(t_zero, 1.0 - t_zero) or 1.0
 
     # Collect the cells first: they must be painted back-to-front (painter's

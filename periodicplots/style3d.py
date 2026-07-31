@@ -753,7 +753,7 @@ def periodic_table_3d(
     lift_norm = None
     if height:
         if not value_mode:
-            raise ValueError("height/relief needs data (value mode)")
+            raise ValueError("relief_height needs data (value mode)")
         lift_max = float(height)
         # heights follow the colour norm unless given one of their own
         if height_norm is None:
@@ -777,8 +777,9 @@ def periodic_table_3d(
         except Exception:
             t_zero = float("nan")
         if t_zero != t_zero:                       # NaN: the norm cannot place 0
-            raise ValueError("signed=True needs a norm that can place 0 "
-                             "(e.g. 'diverging' or a (vmin, vmax) spanning it)")
+            raise ValueError(
+                "relief_signed=True needs a cmap_norm that can place 0 "
+                "(e.g. 'diverging' or a (vmin, vmax) spanning it)")
         reach = max(t_zero, 1.0 - t_zero) or 1.0
 
     created = ax is None

@@ -96,7 +96,8 @@ def _resolve_norm(norm, vals):
     if isinstance(norm, (tuple, list)) and len(norm) == 2:
         return Normalize(vmin=norm[0], vmax=norm[1])
     raise ValueError(
-        "norm must be None, 'diverging', (vmin, vmax) or a matplotlib Normalize"
+        "cmap_norm must be None, 'diverging', (vmin, vmax) or a matplotlib "
+        "Normalize"
     )
 
 

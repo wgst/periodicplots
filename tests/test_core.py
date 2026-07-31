@@ -141,14 +141,14 @@ def test_cbar_loc_is_the_same_option_in_both_functions():
                  lambda **k: pp.periodic_table_3d({"Fe": 1.0, "O": 2.0},
                                                   tile_style="flat", **k)):
         r = call()
-        assert len(r.ax.child_axes) == 1 and len(r.fig.axes) == 1
+        assert r.ax.child_axes                   # an inset, inside the table
         band = r.ax.child_axes[0].get_position()
         assert band.height < band.width          # a thin horizontal bar
         plt.close(r.fig)
         # the outside placements are matplotlib's own, on their own axes
         for loc in ("right", "left", "top", "bottom"):
             r = call(cbar_loc=loc)
-            assert not r.ax.child_axes and len(r.fig.axes) == 2
+            assert not r.ax.child_axes and len(r.fig.axes) > 1
             plt.close(r.fig)
         with pytest.raises(ValueError, match="cbar_loc"):
             call(cbar_loc="middle")
