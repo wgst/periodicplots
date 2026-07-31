@@ -1,8 +1,9 @@
 """Vector periodic-table heatmaps in matplotlib.
 
 The single entry point is :func:`periodic_table`.  It draws each element as a
-matplotlib ``Rectangle`` + text (no rasterisation), so the result is fully
-vector and composes into multi-panel figures via the ``ax=`` argument.
+matplotlib patch (a rounded rectangle by default) + text, with no
+rasterisation, so the result is fully vector and composes into multi-panel
+figures via the ``ax=`` argument.
 
 Default appearance: element symbol (bold) with the value beneath it, a viridis
 heatmap, a slim colourbar and detached La-Lu / Ac-Lr f-block rows.  Atomic
@@ -18,7 +19,7 @@ from matplotlib.axes import Axes
 from matplotlib.cm import ScalarMappable
 from matplotlib.colors import Colormap, Normalize, TwoSlopeNorm, to_rgb
 from matplotlib.figure import Figure
-from matplotlib.patches import Rectangle
+from matplotlib.patches import FancyBboxPatch, Rectangle
 
 from ._elements import ELEMENTS, SYMBOL_TO_Z
 
@@ -134,18 +135,20 @@ def periodic_table(
     values: Optional[Sequence] = None,
     *,
     cmap: Union[str, Colormap] = "viridis",
-    norm=None,
+    cmap_norm=None,
     value_fmt: str = "{:.2f}",
     mass_fmt: str = "{:.0f}",
-    label: Optional[str] = None,
+    label_cbar: Optional[str] = None,
     ax: Optional[Axes] = None,
     # optional per-cell text (all off by default -> matches the reference look)
     show_symbol: bool = True,
     show_value: bool = True,
-    show_number: bool = False,
-    show_mass: bool = False,
+    show_at_number: bool = False,
+    show_at_mass: bool = False,
     show_name: bool = False,
     # cell appearance
+    tile_style: str = "flat",
+    tile_shape: str = "round",
     missing_color="0.92",
     draw_missing: bool = True,
     max_z: int = 118,
@@ -177,19 +180,37 @@ def periodic_table(
         ``periodic_table(elements, values)``.
     cmap :
         Matplotlib colormap name or instance.
-    norm :
+    cmap_norm :
+        How data values map onto the colormap (and the colourbar's range):
         ``None`` (auto min-max), ``'diverging'`` (symmetric ``TwoSlopeNorm``
         about 0), a ``(vmin, vmax)`` tuple, or a matplotlib ``Normalize``.
     value_fmt :
         Format string for the value printed in each cell.
-    label :
+    label_cbar :
         Colourbar label.
     ax :
         Draw into an existing axes (for composing multi-panel figures).  If
         ``None`` a new figure/axes is created.
-    show_number, show_mass, show_name :
+    show_at_number, show_at_mass, show_name :
         Optionally print the atomic number, atomic mass and full element name
         in each cell (all off by default).
+    tile_style :
+        How each cell is rendered.  ``"flat"`` (default) is the plain vector
+        cell.  ``"3d"`` draws each cell as a physical-looking tile (soft drop
+        shadow, lit face) -- purely cosmetic: tiles never rise or sink with
+        the value (that is :func:`periodic_table_3d`'s job).  In 3d mode the
+        tile outline is derived from the face colour, so ``edge_color`` and
+        ``edge_width`` are ignored; everything else (text, fonts, colourbar,
+        group/period labels) behaves exactly as in the flat look.  The tile
+        shadows and gloss are small rasters, which PDF/SVG embed alongside
+        the vector outlines and text -- any output format works, just pick a
+        ``dpi`` you're happy with.
+    tile_shape :
+        Corner geometry, independent of ``tile_style``; ``"round"`` is the
+        default for both styles.  ``"round"`` flat cells are rounded vector
+        rectangles; ``"square"`` flat cells are plain sharp ``Rectangle``s;
+        ``"square"`` 3d tiles take the photographic finish (near-square
+        corners, matte grainy faces, chamfered edges).
     show_group_period :
         Label the groups (1-18) across the top and periods (1-7) down the left.
     savepath :
@@ -202,6 +223,10 @@ def periodic_table(
         Dataclass with ``.fig``, ``.ax`` and ``.mappable`` (add your own
         colourbar with ``fig.colorbar(result.mappable, ...)`` when composing).
     """
+    # public parameter names -> the internal shorthands used below
+    norm, label = cmap_norm, label_cbar
+    show_number, show_mass = show_at_number, show_at_mass
+
     vd = _value_dict(data, values)
     if not vd:
         raise ValueError("no values provided")
@@ -216,6 +241,29 @@ def periodic_table(
     else:
         fig = ax.figure
 
+    if tile_style not in ("flat", "3d"):
+        raise ValueError(
+            f"tile_style must be 'flat' or '3d', got {tile_style!r}")
+    if tile_shape not in ("round", "square"):
+        raise ValueError(
+            f"tile_shape must be 'round' or 'square', got {tile_shape!r}")
+    tiles3d = tile_style == "3d"
+    shape = tile_shape
+    if tiles3d:
+        # Imported here, not at module level: style3d itself imports from core,
+        # so a top-level import back would be circular.  Only the tile-drawing
+        # helper and its shared rasters are borrowed -- every other aspect of
+        # this function (text, fonts, colourbar, limits logic) stays its own.
+        from .style3d import (_draw_tile, _gloss_image, _lip_image,
+                              _matte_image, _noise_image, _shadow_image)
+        square = shape == "square"
+        rounding = 0.022 if square else 0.07
+        shadow_img = (_shadow_image(radius=9, alpha=0.55) if square
+                      else _shadow_image())
+        face_img = _matte_image() if square else _gloss_image()
+        lip_img = _lip_image() if square else None
+        noise_img = _noise_image() if square else None
+
     name_texts = []                              # collected for auto-shrink-to-fit
     for Z, (sym, name, mass, grp, per) in ELEMENTS.items():
         if Z > max_z:                            # e.g. drop the superheavies
@@ -225,36 +273,63 @@ def periodic_table(
             continue
         c, r = _cell_pos(Z, grp, per)
         fc = mappable.to_rgba(vd[Z]) if has else missing_color
-        ax.add_patch(Rectangle((c - 0.5, r - 0.5), 1, 1, facecolor=fc,
-                               edgecolor=edge_color, linewidth=edge_width))
+        if tiles3d:
+            _draw_tile(ax, c, r, to_rgb(fc), shadow_img, face_img,
+                       rounding=rounding, lip_img=lip_img, noise_img=noise_img,
+                       bevel=square, nflip=(1 if Z % 2 else -1,
+                                            1 if (Z >> 1) % 2 else -1))
+        elif shape == "round":                   # rounded flat cell, still vector
+            ax.add_patch(FancyBboxPatch(
+                (c - 0.5, r - 0.5), 1, 1,
+                boxstyle="round,pad=0,rounding_size=0.08", mutation_scale=1.0,
+                facecolor=fc, edgecolor=edge_color, linewidth=edge_width))
+        else:
+            ax.add_patch(Rectangle((c - 0.5, r - 0.5), 1, 1, facecolor=fc,
+                                   edgecolor=edge_color, linewidth=edge_width))
         tc = _auto_text_color(fc, has) if text_color == "auto" else text_color
 
-        # Vertical layout inside the cell.  Atomic number / mass sit in the top
-        # corners (narrow, so they don't reach the centre); the symbol keeps its
+        # Layout inside the cell.  Atomic number / mass sit in the top corners
+        # (narrow, so they don't reach the centre); the symbol keeps its
         # natural height, with the value below it and the name pinned to the
         # bottom when shown.
+        #
+        # A flat cell fills its 1x1 cell, but a 3d tile's face is smaller and
+        # stands on a lip, so a tile takes the layout that the *identical*
+        # tile gets in periodic_table_3d (see style3d): the symbol centred on
+        # the face with the value beneath it, and the corner text pulled in
+        # off the edge.  Both functions draw the same tile, so their text has
+        # to sit the same way on it.
         want_value = show_value and has
-        if show_name:
-            sym_dy, value_dy = (-0.14, 0.16) if want_value else (-0.06, None)
-        elif want_value:
-            sym_dy, value_dy = -0.18, 0.27
+        if tiles3d:
+            sym_dy = 0.0 if (show_name or want_value) else 0.02
+            value_dy = 0.31
+            name_dy = 0.41 if want_value else 0.28
+            corner_dx, corner_dy = 0.41, -0.40
         else:
-            sym_dy, value_dy = 0.0, None
+            if show_name:
+                sym_dy, value_dy = (-0.14, 0.16) if want_value else (-0.06, None)
+            elif want_value:
+                sym_dy, value_dy = -0.18, 0.27
+            else:
+                sym_dy, value_dy = 0.0, None
+            name_dy = 0.45
+            corner_dx, corner_dy = 0.44, -0.44
 
         if show_symbol:
-            ax.text(c, r + sym_dy, sym, ha="center", va="center",
+            ax.text(c, r + sym_dy, sym, ha="center", va="center", zorder=6,
                     fontsize=symbol_fontsize, fontweight="bold", color=tc)
         if want_value:
             ax.text(c, r + value_dy, value_fmt.format(vd[Z]), ha="center",
-                    va="center", fontsize=value_fontsize, color=tc)
+                    va="center", zorder=6, fontsize=value_fontsize, color=tc)
         if show_number:
-            ax.text(c - 0.44, r - 0.44, str(Z), ha="left", va="top",
+            ax.text(c - corner_dx, r + corner_dy, str(Z), ha="left", va="top", zorder=6,
                     fontsize=number_fontsize, color=tc)
         if show_mass:
-            ax.text(c + 0.44, r - 0.44, mass_fmt.format(mass), ha="right", va="top",
-                    fontsize=mass_fontsize, color=tc)
+            ax.text(c + corner_dx, r + corner_dy, mass_fmt.format(mass), ha="right",
+                    va="top", zorder=6, fontsize=mass_fontsize, color=tc)
         if show_name:
-            name_texts.append(ax.text(c, r + 0.45, name, ha="center", va="bottom",
+            name_texts.append(ax.text(c, r + name_dy, name, ha="center",
+                                      va="bottom", zorder=6,
                                       fontsize=name_fontsize, color=tc))
 
     if fblock_labels:
@@ -273,8 +348,9 @@ def periodic_table(
 
     xlo = -0.75 if show_group_period else -0.3
     ytop = -0.35 if show_group_period else 0.3
+    ybot = 10.78 if tiles3d else 10.4             # tiles cast a shadow below Ac-Lr
     ax.set_xlim(xlo, 19)
-    ax.set_ylim(10.4, ytop)                       # row 1 at the top
+    ax.set_ylim(ybot, ytop)                       # row 1 at the top
     ax.set_aspect("auto")
     ax.axis("off")
 

@@ -4,7 +4,7 @@ build-backend = "setuptools.build_meta"
 
 [project]
 name = "periodicplots"
-version = "0.1.0"
+version = "0.4.0"
 description = "Vector periodic-table heatmaps in matplotlib (composable, no heavy deps)."
 readme = "README.md"
 requires-python = ">=3.8"

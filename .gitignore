@@ -11,3 +11,5 @@ dist/
 examples/*.png
 examples/*.pdf
 *.tmp
+# docs: keep the README PNGs, not the PDF demo output
+docs/*.pdf
