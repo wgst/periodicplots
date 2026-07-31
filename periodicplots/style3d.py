@@ -208,6 +208,17 @@ def _noise_image(n: int = 128, alpha: float = 0.055, seed: int = 7) -> np.ndarra
     return rgba
 
 
+def _edge_shadow_image(n: int = 64, alpha: float = 0.17) -> np.ndarray:
+    """Fade across the slit between a block and its left neighbour: clear at
+    the outer edge, darkest against this block's own silhouette.  A raster, so
+    it reads as smooth shadow like the ground ones -- stacked flat polygons
+    banded visibly at this width."""
+    t = np.linspace(0.0, 1.0, n)[None, :]
+    rgba = np.zeros((1, n, 4))
+    rgba[..., 3] = alpha * t ** 1.8
+    return rgba
+
+
 def _wall_image() -> np.ndarray:
     """Stronger wall lighting for the tilted view: clearly lighter at the
     top (near the lit top surface) and darker towards the base."""
@@ -288,14 +299,14 @@ def _block_silhouette(x0, w, ox0, ox1, yg0, yg1, zs, r) -> MplPath:
              br - gdir * r, br, br + (0, -r),
              tbr + (0, r), tbr, tbr + (-r, 0),
              tbl + (r, 0), tbl, tbl - gdir * r,
-             tfl,                                  # sharp wall/rim corner
+             tfl + gdir * r, tfl, tfl + (0, r),    # rim turns down the edge
              fl + (0, -r)]
     codes = [P.MOVETO, P.CURVE3, P.CURVE3,
              P.LINETO, P.CURVE3, P.CURVE3,
              P.LINETO, P.CURVE3, P.CURVE3,
              P.LINETO, P.CURVE3, P.CURVE3,
              P.LINETO, P.CURVE3, P.CURVE3,
-             P.LINETO,
+             P.LINETO, P.CURVE3, P.CURVE3,
              P.CLOSEPOLY]
     return P(np.asarray(verts, dtype=float), codes)
 
@@ -336,8 +347,8 @@ def _pit_silhouette(x0, w, ox0, ox1, yg0, yg1, p, rad) -> MplPath:
 def _draw_tile(ax, c: float, r: float, face, shadow_img, face_img, *,
                size: float = 0.94, depth: float = 0.09, rounding: float = 0.07,
                lift: float = 0.0, tilt: float = 0.0, side: float = 0.0,
-               lip_img=None, noise_img=None, bevel: bool = False,
-               nflip=(1, 1)):
+               lip_img=None, noise_img=None, edge_img=None,
+               bevel: bool = False, nflip=(1, 1)):
     """One 3D tile centred on column ``c``, row ``r`` (y axis is inverted).
 
     With ``tilt == 0`` (straight-on view) the block is a face plus a
@@ -513,18 +524,34 @@ def _draw_tile(ax, c: float, r: float, face, shadow_img, face_img, *,
               zorder=zb, interpolation="bilinear", aspect="auto")
 
     # soft occlusion along the left silhouette (rim + left edge): dims the
-    # sliver of the LEFT neighbour's receding side wall glimpsed through
-    # the inter-block gap, so the slit reads as shadow, not a broken edge.
-    # Many thin nested layers approximate a smooth fade like the ground
-    # shadows (two hard-edged bands would read as stripes).
-    for i in range(6):
-        wd = 0.085 * (1.0 - i / 6.0)
-        ax.add_patch(Polygon([(x0 + ox0, yg0 - zs), (x0 + ox1, yg1 - zs),
-                              (x0 + ox1, yg1), (x0 + ox1 - wd, yg1),
-                              (x0 + ox1 - wd, yg1 - zs),
-                              (x0 + ox0 - wd, yg0 - zs)],
-                             closed=True, facecolor=(0, 0, 0, 0.026),
-                             edgecolor="none", zorder=zb + 0.95))
+    # sliver of the LEFT neighbour's receding side wall glimpsed through the
+    # inter-block gap, so the slit reads as shadow, not a broken edge.  The
+    # band is a constant horizontal offset from the silhouette, so it takes
+    # two pieces: the slanted top rim (sheared to follow it) and the vertical
+    # left edge below it, both clipped to the band itself.
+    if edge_img is not None:
+        wd = 0.085
+        band = Polygon([(x0 + ox0, yg0 - zs), (x0 + ox1, yg1 - zs),
+                        (x0 + ox1, yg1), (x0 + ox1 - wd, yg1),
+                        (x0 + ox1 - wd, yg1 - zs), (x0 + ox0 - wd, yg0 - zs)],
+                       closed=True, facecolor="none", edgecolor="none",
+                       zorder=zb + 0.9)
+        ax.add_patch(band)
+        ei = ax.imshow(edge_img, zorder=zb + 0.95, interpolation="bilinear",
+                       aspect="auto",
+                       extent=(x0 + ox1 - wd, x0 + ox1, yg1, yg1 - zs))
+        ei.set_clip_path(band)
+        if ox0 != ox1:                            # the leaning top rim
+            sh = (ox1 - ox0) / (yg1 - yg0)        # dx per dy along the rim
+            tr = (Affine2D().translate(0, -(yg0 - zs))
+                  + Affine2D.from_values(1, 0, sh, 1, 0, 0)
+                  + Affine2D().translate(0, yg0 - zs) + ax.transData)
+            ri = ax.imshow(edge_img, zorder=zb + 0.95,
+                           interpolation="bilinear", aspect="auto",
+                           extent=(x0 + ox0 - wd, x0 + ox0,
+                                   yg1 - zs, yg0 - zs))
+            ri.set_transform(tr)
+            ri.set_clip_path(band)
 
     # block body: ONE continuous silhouette filled with the wall colour.
     # The top face painted over it leaves the front wall, the side wall and
@@ -814,6 +841,7 @@ def periodic_table_3d(
     rounding = 0.022 if square else 0.07
     shadow_img = (_shadow_image(radius=9, alpha=0.55) if square
                   else _shadow_image())
+    edge_img = _edge_shadow_image() if lift_max else None
     if lift_max:
         face_img = _wall_image()
     else:
@@ -845,7 +873,8 @@ def periodic_table_3d(
                                     lift=lift, tilt=(tilt if lift_max else 0.0),
                                     side=(side_tilt if lift_max else 0.0),
                                     rounding=rounding, lip_img=lip_img,
-                                    noise_img=noise_img, bevel=square,
+                                    noise_img=noise_img, edge_img=edge_img,
+                                    bevel=square,
                                     nflip=(1 if Z % 2 else -1,
                                            1 if (Z >> 1) % 2 else -1))
         # lower-half text offsets, tightened on foreshortened faces
