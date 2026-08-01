@@ -20,7 +20,10 @@ classifiers = [
     "Topic :: Scientific/Engineering :: Visualization",
 ]
 dependencies = [
-    "matplotlib>=3.4",
+    # 3.6 is the floor that is actually exercised: mpl.colormaps.register (the
+    # "poster" cmap) arrived in 3.6, and 3.6/3.7 are the oldest releases the
+    # test suite has been run against.
+    "matplotlib>=3.6",
     "numpy",
 ]
 

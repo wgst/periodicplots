@@ -306,7 +306,8 @@ def periodic_table_relief(
 
     Parameters
     ----------
-    data, values, cmap, norm, label, ax, show_*, colorbar, savepath, ... :
+    data, values, cmap, cmap_norm, label_cbar, ax, show_*, colorbar, cbar_loc,
+    cbar_shape, savepath, ... :
         As in :func:`periodicplots.periodic_table`.
     relief_height :
         Height of the tallest block, in cell widths (with ``relief_signed``,

@@ -68,9 +68,13 @@ _POSTER_RAMP = ["#aecfd8", "#a3c8b4", "#8fbf9d", "#a9c795", "#dccf9d",
                 "#e9a04f", "#ee7e68", "#e6564f", "#d94a45"]
 POSTER_CMAP = LinearSegmentedColormap.from_list("poster", _POSTER_RAMP)
 try:
+    # ColormapRegistry.register is matplotlib >= 3.6 (the declared floor).  The
+    # guard is for re-import, where the names are already taken -- every entry
+    # point also accepts the POSTER_CMAP object, so a failure here only costs
+    # the string spelling.
     mpl.colormaps.register(POSTER_CMAP, name="poster")
     mpl.colormaps.register(POSTER_CMAP.reversed(), name="poster_r")
-except Exception:                                  # already registered
+except ValueError:                                 # already registered
     pass
 
 
