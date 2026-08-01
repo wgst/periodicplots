@@ -184,3 +184,17 @@ def test_gap_bar_is_the_same_weight_in_every_renderer():
         assert w == pytest.approx(ref[0], abs=0.1)
         assert h == pytest.approx(ref[1], abs=0.02)
         plt.close(made.fig)
+
+
+def test_accepts_a_pandas_series():
+    # core._value_dict duck-types anything with .items(), and the docstring
+    # promises pandas Series -- the `dev` extra carries pandas for this
+    pd = pytest.importorskip("pandas")
+    s = pd.Series({"Fe": 1.0, "O": 2.0, "Si": 3.0})
+    for make in (lambda: pp.periodic_table(s, colorbar=False),
+                 lambda: pp.periodic_table_3d(s, colorbar=False),
+                 lambda: pp.periodic_table_3d(s, tile_style="flat",
+                                              colorbar=False)):
+        r = make()
+        assert r.mappable is not None
+        plt.close(r.fig)
