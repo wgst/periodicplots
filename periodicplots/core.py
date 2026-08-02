@@ -261,7 +261,9 @@ def _add_colorbar(fig, ax, mappable, *, loc="gap", label=None, cbar_kw=None,
         kw.setdefault("fraction", 0.020)
         kw.setdefault("pad", 0.008)
         kw.setdefault("shrink", 0.92)
-        kw.setdefault("location", loc)
+        kw["location"] = loc                     # the dedicated option wins:
+        # cbar_kw is for the rest, and a "location" smuggled through it would
+        # silently beat the validated cbar_loc argument
         cb = fig.colorbar(mappable, ax=ax, **kw)
         if label:
             cb.set_label(label)

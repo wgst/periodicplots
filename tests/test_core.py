@@ -180,6 +180,16 @@ def test_cbar_loc_is_the_same_option_in_both_functions():
             call(cbar_loc="middle")
 
 
+def test_cbar_loc_beats_a_conflicting_cbar_kw_location():
+    # cbar_kw is for the rest (fraction, pad, shrink); a "location" smuggled
+    # through it must not override the validated cbar_loc argument
+    r = pp.periodic_table({"Fe": 1.0, "O": 2.0}, cbar_loc="left",
+                          cbar_kw={"location": "right"})
+    cax = next(a for a in r.fig.axes if a is not r.ax)
+    assert cax.get_position().x0 < r.ax.get_position().x0   # bar sits left
+    plt.close(r.fig)
+
+
 def test_gap_colorbar_follows_the_projection():
     # in relief the band leans and squashes with the table, so it sits in the
     # plane rather than floating flat over it
