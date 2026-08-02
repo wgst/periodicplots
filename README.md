@@ -1,6 +1,6 @@
 # periodicplots
 
-Periodic-table heatmaps in matplotlib. Colour each element by any property, in
+Periodic table vector heatmaps in matplotlib. Colour each element by any property, in
 2D or in 3D relief, and compose the result into multi-panel figures via `ax=`.
 Depends only on `matplotlib` and `numpy`; element data is bundled.
 
