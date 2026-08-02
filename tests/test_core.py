@@ -180,6 +180,13 @@ def test_cbar_loc_is_the_same_option_in_both_functions():
             call(cbar_loc="middle")
 
 
+def test_bad_cbar_shape_raises():
+    # the documented values are "round" and "square"; anything else must fail
+    # with a clear message rather than a KeyError deep in the framing code
+    with pytest.raises(ValueError, match="cbar_shape"):
+        pp.periodic_table({"Fe": 1.0}, cbar_shape="oval")
+
+
 def test_cbar_loc_beats_a_conflicting_cbar_kw_location():
     # cbar_kw is for the rest (fraction, pad, shrink); a "location" smuggled
     # through it must not override the validated cbar_loc argument

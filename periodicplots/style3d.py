@@ -678,7 +678,8 @@ def periodic_table_3d(
     """Draw a periodic table as glossy 3D tiles with soft shadows.
 
     With no ``data`` the tiles are coloured by chemical family (pastel
-    poster palette).  With ``data``/``values`` the faces are coloured by the
+    poster palette) and the returned ``.mappable`` is ``None`` -- there is
+    no value scale.  With ``data``/``values`` the faces are coloured by the
     heatmap ``cmap`` exactly as in :func:`periodic_table`.
 
     ``style`` selects the tile finish.  ``"soft"`` (default) is the original
@@ -743,7 +744,8 @@ def periodic_table_3d(
     horizontally in the empty block between Be and B, following the table's
     tilt and lean; ``"right"``, ``"left"``, ``"top"`` and ``"bottom"`` put it
     outside the table.  The bar is framed like an element tile; ``cbar_shape``
-    overrides the corner geometry, which otherwise follows the tile finish.
+    (``"round"`` or ``"square"``) overrides the corner geometry, which
+    otherwise follows the tile finish.
 
     ``background`` draws nothing by default (the figure facecolor shows
     through); pass ``"gradient"`` for the soft pastel backdrop, ``True`` for

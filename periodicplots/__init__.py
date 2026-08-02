@@ -34,7 +34,8 @@ def periodic_table_3d(data=None, values=None, *, tile_style="3d",
     one: 0.60 cell heights for ``tile_style="3d"``, 1.0 for ``"flat"``, whose
     shallower view needs a taller block to read the same; ``relief_signed=True``
     lets negative values sink into the table instead).  With no data the tiles
-    are coloured by chemical family and stay flat (nothing to encode).
+    are coloured by chemical family and stay flat (nothing to encode; the
+    result's ``.mappable`` is ``None`` in that mode).
 
     tile_style :
         How each block is rendered -- the same property `periodic_table` has:

@@ -31,10 +31,15 @@ _LANTH_ROW, _ACT_ROW, _FCOL = 8.5, 9.5, 3
 
 @dataclass
 class PeriodicTablePlot:
-    """Result of :func:`periodic_table`."""
+    """Result of every renderer (``periodic_table``, ``periodic_table_3d``).
+
+    ``mappable`` drives the colourbar -- use it to place your own when
+    composing.  It is ``None`` in exactly one case: the no-data
+    family-coloured poster (``periodic_table_3d()`` without values), which
+    has no value scale."""
     fig: Figure
     ax: Axes
-    mappable: ScalarMappable
+    mappable: Optional[ScalarMappable]
 
     def save(self, path: str, **kwargs) -> "PeriodicTablePlot":
         """Save the figure; format is inferred from the extension."""
@@ -347,9 +352,10 @@ def periodic_table(
         Where the colourbar goes: ``"gap"`` (default) lays it horizontally in
         the empty block between Be and B; ``"right"``, ``"left"``, ``"top"``
         and ``"bottom"`` place it outside the table.  The bar is framed like an
-        element cell; ``cbar_shape`` overrides the corner geometry, which
-        otherwise follows ``tile_shape``.  ``cbar_kw`` is passed on to
-        ``fig.colorbar`` for the rest (``fraction``, ``pad``, ``shrink``).
+        element cell; ``cbar_shape`` -- ``"round"`` or ``"square"`` --
+        overrides the corner geometry, which otherwise follows ``tile_shape``.
+        ``cbar_kw`` is passed on to ``fig.colorbar`` for the rest
+        (``fraction``, ``pad``, ``shrink``).
     ax :
         Draw into an existing axes (for composing multi-panel figures).  If
         ``None`` a new figure/axes is created.

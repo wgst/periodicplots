@@ -64,7 +64,7 @@ pp.periodic_table(slopes, cmap="RdBu_r", cmap_norm="diverging",
 | `ax` | `None` | draw into an existing axes |
 | `colorbar` | `True` | attach a colourbar |
 | `cbar_loc` | `"gap"` | `"gap"` (in the empty Be–B block), `"right"`, `"left"`, `"top"`, `"bottom"` |
-| `cbar_shape` | `None` | corner geometry of the colourbar frame; follows `tile_shape` unless set |
+| `cbar_shape` | `None` | colourbar frame corners, `"round"` or `"square"`; follows `tile_shape` unless set |
 | `cbar_kw` | `None` | passed to `fig.colorbar` (`fraction`, `pad`, `shrink`, …) |
 | `savepath` | `None` | save the figure; the extension picks the format |
 
@@ -135,7 +135,8 @@ pp.periodic_table(slope, ax=axb, cmap="RdBu_r", cmap_norm="diverging")
 ```
 
 Every function returns a `PeriodicTablePlot` with `.fig`, `.ax` and
-`.mappable` — use the mappable to place your own colourbar.
+`.mappable` — use the mappable to place your own colourbar. (`.mappable` is
+`None` only for the no-data family-coloured poster, which has no value scale.)
 
 ## Saving
 
