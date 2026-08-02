@@ -1,5 +1,10 @@
 # periodicplots
 
+[![PyPI](https://img.shields.io/pypi/v/periodicplots.svg)](https://pypi.org/project/periodicplots/)
+[![Python](https://img.shields.io/pypi/pyversions/periodicplots.svg)](https://pypi.org/project/periodicplots/)
+[![tests](https://github.com/wgst/periodicplots/actions/workflows/tests.yml/badge.svg)](https://github.com/wgst/periodicplots/actions/workflows/tests.yml)
+[![License: MIT](https://img.shields.io/badge/License-MIT-yellow.svg)](LICENSE)
+
 Periodic table vector heatmaps in matplotlib. Colour each element by any property, in
 2D or in 3D relief, and compose the result into multi-panel figures via `ax=`.
 Depends only on `matplotlib` and `numpy`; element data is bundled.
