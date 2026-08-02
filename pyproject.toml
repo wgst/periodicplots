@@ -4,7 +4,7 @@ build-backend = "setuptools.build_meta"
 
 [project]
 name = "periodicplots"
-version = "0.1.0"
+version = "0.2.0"
 description = "Vector periodic-table heatmaps in matplotlib (composable, no heavy deps)."
 readme = "README.md"
 requires-python = ">=3.8"
@@ -20,7 +20,15 @@ classifiers = [
     "Topic :: Scientific/Engineering :: Visualization",
 ]
 dependencies = [
-    "matplotlib>=3.4",
+    # 3.6 is the feature floor (mpl.colormaps.register, the "poster" cmap),
+    # but 3.6/3.7 wheels predate numpy 2 and fail to import under it, and pip
+    # cannot express "numpy<2 when matplotlib<3.8.4".  The constraint splits
+    # cleanly by interpreter instead: on py3.8 matplotlib caps at 3.7 and
+    # numpy 2 does not exist, so any resolution works; from py3.9 the floor
+    # rises to 3.8.4, the first release whose wheels import under numpy 1
+    # and 2 alike.  Both floors are exercised in CI.
+    "matplotlib>=3.6; python_version < '3.9'",
+    "matplotlib>=3.8.4; python_version >= '3.9'",
     "numpy",
 ]
 

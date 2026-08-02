@@ -1,0 +1,71 @@
+name: tests
+
+on:
+  push:
+    branches: [main]
+  pull_request:
+
+jobs:
+  test:
+    name: py${{ matrix.python }} · ${{ matrix.label }}
+    runs-on: ${{ matrix.os }}
+    strategy:
+      fail-fast: false
+      matrix:
+        include:
+          # The declared floors, so pyproject's lower bounds stay honest.
+          # matplotlib 3.6 wheels are built against numpy 1.x and fail to import
+          # under numpy 2 ("_ARRAY_API not found"), so the two pin together on
+          # py3.8; from py3.9 pyproject raises the matplotlib floor to 3.8.4,
+          # the first release whose wheels import under numpy 2.
+          - os: ubuntu-22.04
+            python: "3.8"
+            label: "matplotlib 3.6 (py3.8 floor)"
+            mpl: "==3.6.3"
+            np: "<2"
+          - os: ubuntu-latest
+            python: "3.9"
+            label: "matplotlib 3.8.4 + numpy 2 (py3.9 floor)"
+            mpl: "==3.8.4"
+            np: ">=2"
+          - os: ubuntu-latest
+            python: "3.11"
+            label: "latest"
+            mpl: ""
+            np: ""
+          - os: ubuntu-latest
+            python: "3.13"
+            label: "latest"
+            mpl: ""
+            np: ""
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-python@v5
+        with:
+          python-version: ${{ matrix.python }}
+      - name: install
+        run: |
+          python -m pip install --upgrade pip
+          pip install -e ".[dev]"
+      - name: pin to the floor
+        if: matrix.mpl != ''
+        run: pip install "matplotlib${{ matrix.mpl }}" "numpy${{ matrix.np }}"
+      - name: versions under test
+        run: |
+          python -c "import sys, matplotlib, numpy; print(sys.version); \
+                     print('matplotlib', matplotlib.__version__, '| numpy', numpy.__version__)"
+      - name: pytest
+        run: pytest -q
+
+  package:
+    name: build + metadata
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-python@v5
+        with:
+          python-version: "3.12"
+      - name: build sdist + wheel
+        run: pipx run build
+      - name: validate metadata and README rendering
+        run: pipx run twine check dist/*

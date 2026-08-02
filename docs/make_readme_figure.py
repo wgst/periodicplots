@@ -25,15 +25,53 @@ electronegativity = {
     "Am": 1.3, "Cm": 1.3, "Bk": 1.3, "Cf": 1.3, "Es": 1.3, "Fm": 1.3, "Md": 1.3,
     "No": 1.3, "Lr": 1.3,
 }
-pp.periodic_table(electronegativity, label="Pauling electronegativity",
-                  figsize=(10, 5.4), savepath="example.png", dpi=200)
+pp.periodic_table(electronegativity, label_cbar="Pauling electronegativity",
+                  figsize=(10, 5.4), max_z=103, fblock_labels=False,
+                  savepath="example.png", dpi=200)
 
 # diverging example (property defined for a subset)
 slope = {"H": -0.77, "Li": -0.27, "Be": -0.60, "B": -0.47, "C": -0.43, "N": -0.46,
          "O": -0.36, "F": -0.36, "Na": -0.45, "Al": -0.56, "Si": -0.45, "Cl": -0.28,
          "K": -0.39, "Ga": -0.52, "Ge": -0.44, "Cu": -0.16, "Zn": -0.46, "Ag": -0.22,
          "In": -0.41, "Ce": -0.17, "Gd": -0.34}
-pp.periodic_table(slope, cmap="RdBu_r", norm="diverging", figsize=(10, 5.4),
-                  label="mean d$E_g$/dT (meV/K)", value_fmt="{:+.2f}",
+pp.periodic_table(slope, cmap="RdBu_r", cmap_norm="diverging", figsize=(10, 5.4),
+                  label_cbar="mean d$E_g$/dT (meV/K)", value_fmt="{:+.2f}",
+                  max_z=103, fblock_labels=False,
                   savepath="example_diverging.png", dpi=200)
-print("wrote docs/example.png (electronegativity) + docs/example_diverging.png")
+
+# 2D table with 3D-look tiles (tile_style; NO height encoding) -- plasma so it
+# reads as distinct from the poster-cmap relief image below at a glance
+pp.periodic_table(electronegativity, label_cbar="Pauling electronegativity",
+                  tile_style="3d", cmap="plasma", show_at_number=True,
+                  show_value=True, show_at_mass=False, max_z=103,
+                  fblock_labels=False, savepath="example_3d.png", dpi=200)
+
+# the photographic square tile finish, same 2D table
+pp.periodic_table(electronegativity, label_cbar="Pauling electronegativity",
+                  tile_style="3d", tile_shape="square", cmap="poster",
+                  show_at_number=True,
+                  show_value=True, show_at_mass=False, max_z=103,
+                  fblock_labels=False, savepath="example_3d_square.png", dpi=200)
+
+# THE 3D table: value -> block height (relief/occlusion), always on with data
+pp.periodic_table_3d(electronegativity, label_cbar="Pauling electronegativity",
+                     show_value=True, show_at_mass=False, max_z=103,
+                     savepath="example_3d_heatmap.png", dpi=200)
+
+# PDF version (gradients/shadows stay rasterised at the given dpi inside the
+# PDF; outlines and text remain vector)
+pp.periodic_table_3d(electronegativity, label_cbar="Pauling electronegativity",
+                     show_value=True, show_at_mass=False, max_z=103,
+                     savepath="example_3d_heatmap.pdf", dpi=200)
+print("wrote docs/example.png (electronegativity) + docs/example_diverging.png "
+      "+ docs/example_3d.png + docs/example_3d_square.png "
+      "+ docs/example_3d_heatmap.png")
+
+# ---- the flat-shaded relief style (tile_style="flat") -----------------------
+# same electronegativity data, drawn as flat-colour extruded cells; labels are
+# laid on the faces and the output stays vector
+pp.periodic_table_3d(electronegativity, tile_style="flat",
+                     label_cbar="Pauling electronegativity",
+                     value_fmt="{:.1f}", figsize=(10, 5.4),
+                     savepath="example_relief.png", dpi=200)
+print("wrote docs/example_relief.png (vector relief)")

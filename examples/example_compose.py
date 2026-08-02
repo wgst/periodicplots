@@ -12,9 +12,9 @@ slope = {"H": -0.77, "C": -0.43, "O": -0.36, "Si": -0.45, "Fe": -0.18, "Cu": -0.
 fig, (axa, axb) = plt.subplots(1, 2, figsize=(15, 4))
 
 pp.periodic_table(gap, ax=axa, cmap="viridis",
-                  label="mean $E_g$ (eV)")
-pp.periodic_table(slope, ax=axb, cmap="RdBu_r", norm="diverging",
-                  label="mean d$E_g$/dT (meV/K)")
+                  label_cbar="mean $E_g$ (eV)")
+pp.periodic_table(slope, ax=axb, cmap="RdBu_r", cmap_norm="diverging",
+                  label_cbar="mean d$E_g$/dT (meV/K)")
 
 fig.savefig("compose.pdf", bbox_inches="tight")   # fully vector, no rasterisation
 print("wrote compose.pdf")

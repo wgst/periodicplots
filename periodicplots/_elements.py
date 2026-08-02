@@ -1,4 +1,5 @@
-# Auto-generated element metadata (do not edit by hand).
+# Element metadata.  Unstable elements carry the mass number of their most
+# stable isotope (the bracketed value in IUPAC tables).
 # Tuple layout: symbol, name, atomic_mass, group(1-18), period(1-7).
 # f-block placement (La-Lu 57-71, Ac-Lr 89-103) is handled in core._cell_pos.
 
@@ -86,9 +87,9 @@ ELEMENTS = {
     81: ('Tl', 'Thallium', 204.3833, 13, 6),
     82: ('Pb', 'Lead', 207.2, 14, 6),
     83: ('Bi', 'Bismuth', 208.9804, 15, 6),
-    84: ('Po', 'Polonium', 210.0, 16, 6),
+    84: ('Po', 'Polonium', 209.0, 16, 6),
     85: ('At', 'Astatine', 210.0, 17, 6),
-    86: ('Rn', 'Radon', 220.0, 18, 6),
+    86: ('Rn', 'Radon', 222.0, 18, 6),
     87: ('Fr', 'Francium', 223.0, 1, 7),
     88: ('Ra', 'Radium', 226.0, 2, 7),
     89: ('Ac', 'Actinium', 227.0, 3, 7),
@@ -105,7 +106,7 @@ ELEMENTS = {
     100: ('Fm', 'Fermium', 257.0, 3, 7),
     101: ('Md', 'Mendelevium', 258.0, 3, 7),
     102: ('No', 'Nobelium', 259.0, 3, 7),
-    103: ('Lr', 'Lawrencium', 262.0, 3, 7),
+    103: ('Lr', 'Lawrencium', 266.0, 3, 7),
     104: ('Rf', 'Rutherfordium', 267.0, 4, 7),
     105: ('Db', 'Dubnium', 268.0, 5, 7),
     106: ('Sg', 'Seaborgium', 269.0, 6, 7),

@@ -10,6 +10,6 @@ values = {
 }
 
 # default look == the reference figure (symbol + value + viridis + colourbar)
-pp.periodic_table(values, label="mean $E_g$ (eV)",
+pp.periodic_table(values, label_cbar="mean $E_g$ (eV)",
                   savepath="basic.pdf")           # -> examples/basic.pdf
 print("wrote basic.pdf")
