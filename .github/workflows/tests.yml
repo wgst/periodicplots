@@ -13,14 +13,21 @@ jobs:
       fail-fast: false
       matrix:
         include:
-          # The declared floor, so pyproject's lower bounds stay honest.
+          # The declared floors, so pyproject's lower bounds stay honest.
           # matplotlib 3.6 wheels are built against numpy 1.x and fail to import
-          # under numpy 2 ("_ARRAY_API not found"), so the two pin together.
+          # under numpy 2 ("_ARRAY_API not found"), so the two pin together on
+          # py3.8; from py3.9 pyproject raises the matplotlib floor to 3.8.4,
+          # the first release whose wheels import under numpy 2.
           - os: ubuntu-22.04
             python: "3.8"
-            label: "matplotlib 3.6 (floor)"
+            label: "matplotlib 3.6 (py3.8 floor)"
             mpl: "==3.6.3"
             np: "<2"
+          - os: ubuntu-latest
+            python: "3.9"
+            label: "matplotlib 3.8.4 + numpy 2 (py3.9 floor)"
+            mpl: "==3.8.4"
+            np: ">=2"
           - os: ubuntu-latest
             python: "3.11"
             label: "latest"
