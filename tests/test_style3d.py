@@ -268,6 +268,20 @@ def test_values_without_data_raise():
         pp.periodic_table_3d(values=[1.0, 2.0])
 
 
+def test_ground_shadows_lie_under_every_block_of_their_row():
+    # the contact shadow lies on the ground, so it is keyed to the row alone:
+    # at the block's own zorder (which grows with column) the halo of a
+    # right-hand tile was drawn over the body of the tile to its left
+    r = pp.periodic_table_3d({"Fe": 1.0, "Co": 2.0}, relief_height=0.6,
+                             draw_missing=False, colorbar=False,
+                             background=False)
+    row_base = 10 + 60 * 4                       # Fe and Co sit in period 4
+    shadows = [im for im in r.ax.images if im.get_zorder() == row_base]
+    assert len(shadows) == 2                     # one per tile, both at the row base
+    assert row_base < min(p.get_zorder() for p in r.ax.patches)
+    plt.close(r.fig)
+
+
 def test_pit_geometry_replaces_the_standing_body():
     # a sunken tile draws the pit silhouette instead of a block: no ground
     # shadow (a hole casts none) and no left-edge occlusion strips

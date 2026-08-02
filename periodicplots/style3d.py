@@ -456,6 +456,11 @@ def _draw_tile(ax, c: float, r: float, face, shadow_img, face_img, *,
     # block can layer above its LEFT neighbour (occlusion shadow) while
     # staying under everything of the row in front
     zb = 10 + 60 * r + 2.5 * c
+    # ...but the ground contact shadow is keyed to the ROW alone: it lies on
+    # the ground, so it must stay under every block of its own row -- at zb it
+    # would be drawn over the body and walls of the tile to the left, whose
+    # zorder is lower by the column term
+    zg = 10 + 60 * r
 
     # rigid yaw of the whole table: the ground plane leans sideways with
     # depth, every point at row-depth rr shifting left by side * rr — so
@@ -534,7 +539,7 @@ def _draw_tile(ax, c: float, r: float, face, shadow_img, face_img, *,
               extent=(x0 + oxm - grow / 2, x0 + oxm + w + grow / 2,
                       yg1 + (off + grow / 2) * squash,
                       yg0 + (off - grow / 2) * squash),
-              zorder=zb, interpolation="bilinear", aspect="auto")
+              zorder=zg, interpolation="bilinear", aspect="auto")
 
     # soft occlusion along the left silhouette (rim + left edge): dims the
     # sliver of the LEFT neighbour's receding side wall glimpsed through the
