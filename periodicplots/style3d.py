@@ -809,15 +809,25 @@ def periodic_table_3d(
                 "(e.g. 'diverging' or a (vmin, vmax) spanning it)")
         reach = max(t_zero, 1.0 - t_zero) or 1.0
 
+    keep = None
+    if elements is not None:
+        keep = {_to_Z(e) for e in elements}
+
+    def _drawn(Z):
+        """Whether this element appears in the drawing, after every filter."""
+        return (Z <= max_z and (keep is None or Z in keep)
+                and (not value_mode or Z in vd or draw_missing))
+
+    if not any(_drawn(Z) for Z in ELEMENTS):
+        raise ValueError(
+            "nothing to draw: the max_z / elements / draw_missing filters "
+            "exclude every element")
+
     created = ax is None
     if created:
         fig, ax = plt.subplots(figsize=figsize)
     else:
         fig = ax.figure
-
-    keep = None
-    if elements is not None:
-        keep = {_to_Z(e) for e in elements}
 
     if lift_max:
         # Limits from what is actually drawn rather than a worst-case formula:
@@ -831,15 +841,14 @@ def periodic_table_3d(
         HALF, D2, PAD = _TILE_W / 2, _TILE_D / 2, 0.34
         placed = []
         for Z, (sym, name, mass, grp, per) in ELEMENTS.items():
-            if Z > max_z or (keep is not None and Z not in keep):
-                continue
-            if value_mode and Z not in vd and not draw_missing:
+            if not _drawn(Z):
                 continue
             c, r = _cell_pos(Z, grp, per)
             placed.append((c, r, 0.09 + (_lift(vd[Z]) if Z in vd else 0.0)))
         x_lo = min(c - HALF - side_tilt * (r + D2) for c, r, _ in placed) - PAD
         x_hi = max(c + HALF - side_tilt * (r - D2) for c, r, _ in placed) + PAD
-        if fblock_labels:                          # the "La-Lu" / "Ac-Lr" captions
+        if fblock_labels and any(_drawn(z) for z in range(57, 104)):
+            # room for the "La-Lu" / "Ac-Lr" captions
             x_lo = min(x_lo, _FCOL - 1.75 - side_tilt * _ACT_ROW)
         # a standing block reaches up by zs and casts a shadow past its front
         # edge; a sunken one (zs < 0) instead drops its face that far below
@@ -852,12 +861,9 @@ def periodic_table_3d(
         # top/bottom from the rows actually drawn, so a restricted table
         # (elements=..., max_z=...) is not left floating in empty space
         rows = [_cell_pos(Z, grp, per)[1]
-                for Z, (_s, _n, _m, grp, per) in ELEMENTS.items()
-                if Z <= max_z and (keep is None or Z in keep)
-                and (not value_mode or Z in vd or draw_missing)]
+                for Z, (_s, _n, _m, grp, per) in ELEMENTS.items() if _drawn(Z)]
         xlim = (-0.35, 19.05)
-        ylim = ((max(rows) + 1.25, min(rows) - 0.8) if rows
-                else (10.75, 0.2))                 # row 1 at the top
+        ylim = (max(rows) + 1.25, min(rows) - 0.8)  # row 1 at the top
 
     if background == "gradient":
         ax.imshow(_background_image(),
@@ -891,11 +897,9 @@ def periodic_table_3d(
         pt2data = (xlim[1] - xlim[0]) / ax_pt
 
     for Z, (sym, name, mass, grp, per) in ELEMENTS.items():
-        if Z > max_z or (keep is not None and Z not in keep):
+        if not _drawn(Z):
             continue
         has = Z in vd
-        if value_mode and not has and not draw_missing:
-            continue
         c, r = _cell_pos(Z, grp, per)
 
         if value_mode:
@@ -957,9 +961,8 @@ def periodic_table_3d(
         xlean = side_tilt if lift_max else 0.0
         for row, lab, lo, hi in ((_LANTH_ROW, "La–Lu", 57, 71),
                                  (_ACT_ROW, "Ac–Lr", 89, 103)):
-            if max_z < lo or (keep is not None
-                              and not any(lo <= z <= hi for z in keep)):
-                continue
+            if not any(_drawn(z) for z in range(lo, hi + 1)):
+                continue                           # caption for an absent row
             ax.text(_FCOL - 1.2 - xlean * row,
                     row * yscale - (0.1 if lift_max else 0.0),
                     lab, ha="center", va="center",

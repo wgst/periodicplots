@@ -268,6 +268,18 @@ def test_values_without_data_raise():
         pp.periodic_table_3d(values=[1.0, 2.0])
 
 
+def test_fblock_captions_only_when_the_block_is_drawn():
+    # a "La-Lu" caption beside an empty row would float outside the trimmed
+    # limits; every filter (max_z, elements, draw_missing) must silence it
+    r = pp.periodic_table_3d({"Fe": 1.0}, relief_height=0.0, draw_missing=False,
+                             fblock_labels=True, colorbar=False)
+    assert not any("Lu" in t.get_text() for t in r.ax.texts)
+    plt.close(r.fig)
+    full = pp.periodic_table_3d(fblock_labels=True)
+    assert any("Lu" in t.get_text() for t in full.ax.texts)
+    plt.close(full.fig)
+
+
 def test_ground_shadows_lie_under_every_block_of_their_row():
     # the contact shadow lies on the ground, so it is keyed to the row alone:
     # at the block's own zorder (which grows with column) the halo of a
