@@ -357,6 +357,46 @@ def test_flat_without_data_says_so_clearly():
     plt.close("all")
 
 
+def test_relief_norm_drives_height_in_the_flat_renderer():
+    # documented for periodic_table_3d without a tile_style scope, so the
+    # flat renderer must support it too: magnitude height, diverging colour
+    by_mag = upright({"Fe": -1.0, "Co": 0.0, "Ni": 1.0}, cmap_norm="diverging",
+                     relief_norm=lambda v: abs(v))
+    assert _text_y(by_mag, "Fe") == pytest.approx(_text_y(by_mag, "Ni"))
+    assert _text_y(by_mag, "Co") > _text_y(by_mag, "Fe")   # zero sits lowest
+    plt.close(by_mag.fig)
+
+
+def test_signed_norm_must_span_zero():
+    # a linear norm whose range excludes 0 used to clamp silently and degrade
+    # to unsigned relief
+    with pytest.raises(ValueError, match="place 0"):
+        upright({"Fe": 1.0, "O": 5.0}, cmap_norm=(0.9, 5.0), relief_signed=True)
+
+
+def test_relief_norm_callable_errors_propagate():
+    def bad(v):
+        raise RuntimeError("user bug")
+    with pytest.raises(RuntimeError, match="user bug"):
+        upright({"Fe": 1.0}, relief_norm=bad)
+
+
+def test_signed_or_relief_norm_need_height():
+    with pytest.raises(ValueError, match="relief_height"):
+        upright({"Fe": 1.0}, relief_height=0.0, relief_signed=True)
+
+
+def test_captions_stay_visible_over_deep_pits():
+    # captions are annotations: a deep Fr/Ra pit must not swallow "La-Lu"
+    r = periodic_table_relief({"Fr": -1.0, "Ce": 1.0}, relief_signed=True,
+                              cmap_norm="diverging", colorbar=False)
+    caps = [t for t in r.ax.texts if "La" in t.get_text()]
+    blocks = [p for p in r.ax.patches if isinstance(p, Polygon)]
+    assert caps and min(t.get_zorder() for t in caps) > \
+        max(p.get_zorder() for p in blocks)
+    plt.close(r.fig)
+
+
 def test_version_is_consistent():
     # read the version with a regex rather than tomllib, which is 3.11+ only
     # while the package supports older interpreters

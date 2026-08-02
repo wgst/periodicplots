@@ -28,7 +28,7 @@ from typing import Mapping, Optional, Sequence, Union
 import matplotlib.pyplot as plt
 from matplotlib.axes import Axes
 from matplotlib.cm import ScalarMappable
-from matplotlib.colors import Colormap, to_rgb
+from matplotlib.colors import Colormap, Normalize, to_rgb
 from matplotlib.font_manager import FontProperties
 from matplotlib.patches import PathPatch, Polygon
 from matplotlib.textpath import TextPath
@@ -43,10 +43,14 @@ from .core import (
     PeriodicTablePlot,
     _auto_text_color,
     _cell_pos,
+    _check_fmt,
     _check_savefig_kw,
+    _get_cmap,
+    _lift_frac,
     _norm_frac,
     _resolve_norm,
     _shrink_to_fit,
+    _validate_cbar,
     _value_dict,
 )
 
@@ -248,6 +252,7 @@ def periodic_table_relief(
     relief_height: float = 1.0,
     base_height: float = 0.10,
     relief_signed: bool = False,
+    relief_norm=None,
     depth: float = 0.72,
     shear: float = -0.11,
     gap: float = 0.0,
@@ -310,6 +315,11 @@ def periodic_table_relief(
         the deeper the more negative.  This is what you want for a diverging
         property; ``base_height`` no longer applies, elements without a value
         sit flat in the baseline plane, and zero requires a norm that spans it.
+    relief_norm :
+        Drive the block heights from a normalisation of their own instead of
+        ``cmap_norm`` -- e.g. a diverging colour scale about zero with the
+        height standing for the *magnitude*.  Accepts anything ``cmap_norm``
+        does, or a plain callable mapping a value to [0, 1].
     depth :
         Row pitch, in cell widths: how far apart successive rows sit on screen.
         Smaller = the view tips further overhead and rows overlap more (1 = a
@@ -350,16 +360,55 @@ def periodic_table_relief(
     show_number, show_mass = show_at_number, show_at_mass
     height, signed = relief_height, relief_signed
 
+    # every cheap validation runs BEFORE the figure exists, so a caller
+    # looping over bad inputs cannot accumulate leaked open figures
     _check_savefig_kw(savepath, savefig_kw)
-    vd = _value_dict(data, values)
-    if not vd:
-        raise ValueError("no values provided")
+    _check_fmt(value_fmt=value_fmt, mass_fmt=mass_fmt)
     if not 0 < depth <= 1:
         raise ValueError("depth must be in (0, 1]")
+    if (signed or relief_norm is not None) and not height:
+        raise ValueError("relief_signed / relief_norm need relief_height > 0")
+    vd = _value_dict(data, values)
+    if not vd:
+        raise ValueError("no values provided (NaN counts as no value)")
+
+    def _drawn(Z):
+        """Whether this element appears in the drawing, after every filter."""
+        return Z <= max_z and (Z in vd or draw_missing)
+
+    if not any(_drawn(Z) for Z in ELEMENTS):
+        raise ValueError("nothing to draw: the max_z / draw_missing filters "
+                         "exclude every element")
+    if colorbar:
+        _validate_cbar(cbar_loc, cbar_shape or "square")
     n = _resolve_norm(norm, list(vd.values()))
-    cmap_obj = plt.get_cmap(cmap) if isinstance(cmap, str) else cmap
+    # heights follow the colour norm unless given one of their own; a plain
+    # callable maps a value straight to [0, 1]
+    plain = (relief_norm is not None and callable(relief_norm)
+             and not isinstance(relief_norm, Normalize))
+    if relief_norm is None:
+        lift_norm = n
+    elif plain:
+        lift_norm = relief_norm
+    else:
+        lift_norm = _resolve_norm(relief_norm, list(vd.values()))
+    cmap_obj = _get_cmap(cmap)
     mappable = ScalarMappable(norm=n, cmap=cmap_obj)
     mappable.set_array([])
+
+    if signed:
+        # Where zero sits on the height scale; the relief is measured from
+        # there, scaled so the value furthest from it reaches relief_height.
+        # Unclipped on purpose: a norm whose range excludes 0 would clamp to
+        # an end and silently degrade to unsigned relief.
+        t_zero = (float(lift_norm(0.0)) if plain
+                  else _norm_frac(lift_norm, 0.0, clip=False))
+        which = "relief_norm" if relief_norm is not None else "cmap_norm"
+        if t_zero is None or t_zero != t_zero or not 0.0 <= t_zero <= 1.0:
+            raise ValueError(
+                f"relief_signed=True needs a {which} that can place 0 inside "
+                "its range (e.g. 'diverging' or a (vmin, vmax) spanning 0)")
+        reach = max(t_zero, 1.0 - t_zero) or 1.0
 
     created = ax is None
     if created:
@@ -369,29 +418,19 @@ def periodic_table_relief(
 
     half = min(max(0.5 - gap / 2.0, 0.05), 0.5)
 
-    if signed:
-        # Where zero sits on the colour scale; the relief is measured from there,
-        # scaled so the value furthest from it reaches +/- `relief_height`.
-        t_zero = _norm_frac(n, 0.0)
-        if t_zero is None:
-            raise ValueError(
-                "relief_signed=True needs a cmap_norm that can place 0 "
-                "(e.g. cmap_norm='diverging' or a (vmin, vmax) spanning 0)")
-        reach = max(t_zero, 1.0 - t_zero) or 1.0
-
     # Collect the cells first: they must be painted back-to-front (painter's
     # algorithm) — far rows before near ones and, once sheared, the far side of
     # each row before the near side.
     cells = []
     for Z, (sym, name, mass, grp, per) in ELEMENTS.items():
-        if Z > max_z:
+        if not _drawn(Z):
             continue
         has = Z in vd
-        if not has and not draw_missing:
-            continue
         c, r = _cell_pos(Z, grp, per)
         if has:
-            t = _norm_frac(n, vd[Z]) or 0.0
+            t = _lift_frac(lift_norm, vd[Z], plain)
+            if t is None:                        # masked (e.g. 0 on a log scale)
+                t = t_zero if signed else 0.0
             z = (height * (t - t_zero) / reach if signed
                  else base_height + (height - base_height) * t)
             fc = mappable.to_rgba(vd[Z])
@@ -457,10 +496,17 @@ def periodic_table_relief(
             labels.append((name, *surf(0.0, 0.9 * half), name_fontsize, "normal",
                            tc, "center", "bottom", tz, True))
 
+    # captions and axis-style labels are annotations: they sit above every
+    # block, or a deep signed pit in the last periods would swallow them
+    ann_z = 3.0 + len(cells)
     if fblock_labels:
-        for row, lab in ((_LANTH_ROW, "La-Lu"), (_ACT_ROW, "Ac-Lr")):
+        for row, lab, lo, hi in ((_LANTH_ROW, "La-Lu", 57, 71),
+                                 (_ACT_ROW, "Ac-Lr", 89, 103)):
+            if not any(_drawn(z) for z in range(lo, hi + 1)):
+                continue                         # caption for an absent row
             ax.text(_FCOL - 1.15 + shear * row, row * depth, lab, ha="center",
-                    va="center", fontsize=6.5, color="0.4", style="italic", zorder=1)
+                    va="center", fontsize=6.5, color="0.4", style="italic",
+                    zorder=ann_z)
 
     ytop = min(tops) - half * depth               # top of the tallest block
     ybot = max(_ACT_ROW * depth + half * depth,   # floor of the nearest row, or
@@ -471,10 +517,10 @@ def periodic_table_relief(
     if show_group_period:
         for g in range(1, 19):                    # groups: clear above the blocks
             ax.text(g + shear, ytop - 0.32, str(g), ha="center", va="center",
-                    fontsize=7.0, color="0.45", zorder=1)
+                    fontsize=7.0, color="0.45", zorder=ann_z)
         for p in range(1, 8):                     # periods: at each row's floor
             ax.text(xlo - 0.45 + shear * p, p * depth, str(p), ha="center",
-                    va="center", fontsize=7.0, color="0.45", zorder=1)
+                    va="center", fontsize=7.0, color="0.45", zorder=ann_z)
         ytop -= 0.60
         xlo -= 0.75
 
@@ -514,5 +560,10 @@ def periodic_table_relief(
 
     result = PeriodicTablePlot(fig=fig, ax=ax, mappable=mappable)
     if savepath:
-        result.save(savepath, **savefig_kw)
+        try:
+            result.save(savepath, **savefig_kw)
+        except Exception:
+            if created:                          # don't leak the open figure
+                plt.close(fig)
+            raise
     return result

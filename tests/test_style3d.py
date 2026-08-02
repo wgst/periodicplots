@@ -296,14 +296,65 @@ def test_ground_shadows_lie_under_every_block_of_their_row():
 
 def test_pit_geometry_replaces_the_standing_body():
     # a sunken tile draws the pit silhouette instead of a block: no ground
-    # shadow (a hole casts none) and no left-edge occlusion strips
+    # shadow raster (a hole casts none)
     from matplotlib.colors import TwoSlopeNorm
     kw = dict(draw_missing=False, colorbar=False, background=False,
               relief_height=0.6, relief_signed=True, cmap_norm=TwoSlopeNorm(0.0, -1.0, 1.0))
     up = pp.periodic_table_3d({"Fe": 1.0}, **kw)
     down = pp.periodic_table_3d({"Fe": -1.0}, **kw)
     assert len(down.ax.images) < len(up.ax.images)     # shadow raster dropped
-    from matplotlib.patches import Polygon
-    assert sum(isinstance(p, Polygon) for p in down.ax.patches) < \
-        sum(isinstance(p, Polygon) for p in up.ax.patches)
     plt.close(up.fig), plt.close(down.fig)
+
+
+def test_edge_dimmer_needs_a_left_neighbour():
+    # the occlusion gradient dims the LEFT neighbour's wall; a tile with no
+    # drawn left neighbour used to get a floating strip over background (or,
+    # tall enough, over the row behind)
+    r = pp.periodic_table_3d({"Na": 0.3, "Ca": 1.0}, elements=["Na", "Ca"],
+                             relief_height=1.0, colorbar=False,
+                             background=False)
+    assert len(r.ax.images) == 2                 # one ground shadow per tile
+    plt.close(r.fig)
+
+
+def test_edge_dimmer_stays_on_the_neighbours_wall():
+    # a tall tile next to a short one: the gradient is bounded by the SHORT
+    # neighbour's wall quad, not by the tall tile's own full height
+    r = pp.periodic_table_3d({"Fe": 0.0, "Co": 1.0}, draw_missing=False,
+                             relief_height=1.0, colorbar=False,
+                             background=False)
+    row_base = 10 + 60 * 4
+    strips = [im for im in r.ax.images if im.get_zorder() != row_base]
+    assert strips                                # Co dims Fe's wall
+    for im in strips:
+        x0e, x1e, y0e, y1e = im.get_extent()
+        assert abs(y0e - y1e) < 1.0              # old band spanned Co's ~1.1
+
+
+def test_signed_error_names_the_norm_in_use():
+    from matplotlib.colors import LogNorm
+    with pytest.raises(ValueError, match="relief_norm"):
+        pp.periodic_table_3d({"Fe": 1.0, "O": 2.0}, relief_height=0.6,
+                             relief_signed=True,
+                             relief_norm=LogNorm(1.0, 10.0), colorbar=False)
+
+
+def test_composed_axes_interpolation_survives_pdf_save(tmp_path):
+    # the vector-save path rewrites image interpolation; a caller-owned image
+    # in a composed axes must get its own setting back, not a blanket value
+    import numpy as np
+    fig, ax = plt.subplots()
+    user = ax.imshow(np.zeros((4, 4)), interpolation="nearest")
+    pp.periodic_table_3d({"Fe": 1.0}, ax=ax, max_z=30, colorbar=False,
+                         savepath=str(tmp_path / "t.pdf"))
+    assert user.get_interpolation() == "nearest"
+    plt.close(fig)
+
+
+def test_poster_resolves_to_the_bundled_ramp_everywhere():
+    # core resolves via the registry, style3d used a special case: if the
+    # registry slot was taken at import, the same name meant two colormaps
+    a = pp.periodic_table({"Fe": 1.0, "O": 2.0}, cmap="poster", colorbar=False)
+    b = pp.periodic_table_3d({"Fe": 1.0, "O": 2.0}, colorbar=False)
+    assert a.mappable.get_cmap() is b.mappable.get_cmap()
+    plt.close(a.fig), plt.close(b.fig)

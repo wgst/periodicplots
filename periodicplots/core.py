@@ -12,6 +12,7 @@ number, atomic mass and full element name are optional (off by default).
 """
 from __future__ import annotations
 
+import math
 from dataclasses import dataclass
 from typing import Mapping, Optional, Sequence, Union
 
@@ -66,7 +67,12 @@ def _to_Z(key: Union[int, str]) -> int:
         if z is None:
             raise KeyError(f"unknown element symbol: {key!r}")
         return z
+    if isinstance(key, bool):                    # True would silently become H
+        raise TypeError(f"element key must be a symbol or atomic number, "
+                        f"got {key!r}")
     z = int(key)
+    if z != key:                                 # 26.5 must not become Fe
+        raise ValueError(f"atomic number must be integral, got {key!r}")
     if z not in ELEMENTS:
         raise KeyError(f"atomic number out of range (1-118): {key!r}")
     return z
@@ -76,23 +82,40 @@ def _value_dict(data, values) -> dict:
     """Normalise the input to ``{Z: value}``.
 
     ``data`` may be a mapping ``{symbol|Z: value}`` (``values`` omitted), or a
-    sequence of element keys paired with a ``values`` sequence.
+    sequence of element keys paired with a ``values`` sequence.  NaN counts as
+    "no value" (the element is treated as missing); infinities and duplicate
+    keys -- including a symbol next to its own atomic number -- are errors.
     """
     if values is not None:
-        n_data = len(data) if hasattr(data, "__len__") else None
-        n_vals = len(values) if hasattr(values, "__len__") else None
-        if n_data is not None and n_vals is not None and n_data != n_vals:
+        if isinstance(data, Mapping) or hasattr(data, "items"):
+            raise TypeError(
+                "values= cannot be combined with a mapping/Series data; put "
+                "the values in the mapping, or pass two plain sequences")
+        data, values = list(data), list(values)  # a generator would zip-truncate
+        if len(data) != len(values):
             raise ValueError(
-                f"data and values differ in length ({n_data} != {n_vals})")
-        return {_to_Z(k): float(v) for k, v in zip(data, values)}
-    if isinstance(data, Mapping):
-        return {_to_Z(k): float(v) for k, v in data.items()}
-    if hasattr(data, "items"):                   # pandas Series etc.
-        return {_to_Z(k): float(v) for k, v in data.items()}
-    raise TypeError(
-        "pass either a mapping {element: value} or two sequences "
-        "periodic_table(elements, values)"
-    )
+                f"data and values differ in length ({len(data)} != {len(values)})")
+        pairs = zip(data, values)
+    elif isinstance(data, Mapping) or hasattr(data, "items"):
+        pairs = data.items()                     # dict, pandas Series, ...
+    else:
+        raise TypeError(
+            "pass either a mapping {element: value} or two parallel "
+            "sequences (elements, values)"
+        )
+    out: dict = {}
+    seen: set = set()
+    for k, v in pairs:
+        z = _to_Z(k)
+        if z in seen:
+            raise ValueError(f"duplicate entry for {ELEMENTS[z][0]} (Z={z})")
+        seen.add(z)
+        v = float(v)
+        if math.isinf(v):
+            raise ValueError(f"non-finite value for {ELEMENTS[z][0]}: {v}")
+        if v == v:                               # NaN means "no value": skip
+            out[z] = v
+    return out
 
 
 def _resolve_norm(norm, vals):
@@ -104,6 +127,9 @@ def _resolve_norm(norm, vals):
         m = max(abs(min(vals)), abs(max(vals))) or 1.0
         return TwoSlopeNorm(0.0, -m, m)
     if isinstance(norm, (tuple, list)) and len(norm) == 2:
+        if not norm[0] < norm[1]:
+            raise ValueError(
+                f"cmap_norm (vmin, vmax) must be increasing, got {tuple(norm)!r}")
         return Normalize(vmin=norm[0], vmax=norm[1])
     raise ValueError(
         "cmap_norm must be None, 'diverging', (vmin, vmax) or a matplotlib "
@@ -111,8 +137,9 @@ def _resolve_norm(norm, vals):
     )
 
 
-def _norm_frac(norm, value):
-    """``norm(value)`` clipped to [0, 1], or ``None`` if it is not a number."""
+def _norm_frac(norm, value, clip=True):
+    """``norm(value)`` clipped to [0, 1] (raw with ``clip=False``), or ``None``
+    if it is not a number."""
     try:
         t = norm(float(value))
     except Exception:
@@ -122,7 +149,53 @@ def _norm_frac(norm, value):
     t = float(t)
     if t != t:                                   # NaN
         return None
-    return min(max(t, 0.0), 1.0)
+    return min(max(t, 0.0), 1.0) if clip else t
+
+
+def _lift_frac(norm, value, plain):
+    """Height fraction from a relief norm.
+
+    ``plain`` marks a user-supplied callable: its own errors must surface (a
+    bug would otherwise silently flatten the table), so only a ``Normalize``
+    gets :func:`_norm_frac`'s tolerance for masked/log-scale quirks."""
+    if plain:
+        t = float(norm(float(value)))
+        if t != t:                               # NaN
+            return None
+        return min(max(t, 0.0), 1.0)
+    return _norm_frac(norm, value)
+
+
+def _get_cmap(cmap):
+    """Resolve a colormap spec.  The bundled ``"poster"``/``"poster_r"`` names
+    resolve to the package's own ramp even if the registry slot was already
+    taken by a different colormap when this package was imported."""
+    if not isinstance(cmap, str):
+        return cmap
+    if cmap in ("poster", "poster_r"):
+        from .style3d import POSTER_CMAP         # deferred: style3d imports core
+        return POSTER_CMAP if cmap == "poster" else POSTER_CMAP.reversed()
+    return plt.get_cmap(cmap)
+
+
+def _check_fmt(**fmts):
+    """Probe the per-cell format strings before any figure exists, so a bad
+    one cannot fail mid-draw and leak the open figure."""
+    for name, fmt in fmts.items():
+        try:
+            fmt.format(0.0)
+        except Exception as e:
+            raise ValueError(f"bad {name} {fmt!r}: {e}") from None
+
+
+def _validate_cbar(loc, shape):
+    """Validate colourbar placement/shape before any figure exists."""
+    if shape not in _CBAR_ROUNDING:
+        raise ValueError(
+            f"cbar_shape must be 'round' or 'square', got {shape!r}")
+    if loc not in _CBAR_LOCS:
+        raise ValueError(
+            f"cbar_loc must be one of {_CBAR_LOCS}, got {loc!r}")
 
 
 def _check_savefig_kw(savepath, savefig_kw):
@@ -135,7 +208,7 @@ def _check_savefig_kw(savepath, savefig_kw):
         raise TypeError(
             "unexpected keyword argument(s): " + ", ".join(sorted(savefig_kw))
             + " -- extra keywords are forwarded to savefig (with savepath=); "
-            "check for a typo, or for an option of the other tile_style")
+            "check for a typo, or for an option of a different renderer")
 
 
 def _shrink_to_fit(fig, ax, texts, max_frac: float = 0.85):
@@ -226,12 +299,7 @@ def _add_colorbar(fig, ax, mappable, *, loc="gap", label=None, cbar_kw=None,
     table's ``tile_shape``, and its text is sized from the cell so every
     renderer's bar reads alike; ``font_scale`` scales that text.
     """
-    if shape not in _CBAR_ROUNDING:
-        raise ValueError(
-            f"cbar_shape must be 'round' or 'square', got {shape!r}")
-    if loc not in _CBAR_LOCS:
-        raise ValueError(
-            f"cbar_loc must be one of {_CBAR_LOCS}, got {loc!r}")
+    _validate_cbar(loc, shape)
     kw = dict(cbar_kw or {})
     if loc == "gap":
         x0, x1, rc = _GAP_BAND
@@ -255,10 +323,17 @@ def _add_colorbar(fig, ax, mappable, *, loc="gap", label=None, cbar_kw=None,
             h = abs(tofrac(x0, rc + half)[1] - tofrac(x0, rc - half)[1])
         cax = ax.inset_axes([min(e0[0], e1[0]), (e0[1] + e1[1]) / 2.0 - h / 2.0,
                              abs(e1[0] - e0[0]), h])
-        kw.setdefault("orientation", "horizontal")
+        # The gap band's geometry is horizontal, full stop -- an orientation
+        # (or location) smuggled through cbar_kw would draw a vertical
+        # gradient inside the 1/3-cell-tall strip, so the dedicated options
+        # win here exactly as cbar_loc does for the outside placements.
+        kw.pop("location", None)
+        kw["orientation"] = "horizontal"
+        tickloc = kw.get("ticklocation")
         cb = fig.colorbar(mappable, cax=cax, **kw)
-        cax.xaxis.set_ticks_position("top")      # ticks, labels and title above
-        cax.xaxis.set_label_position("top")
+        if tickloc is None:                      # ticks, labels, title above
+            cax.xaxis.set_ticks_position("top")
+            cax.xaxis.set_label_position("top")
         if label:
             cb.set_label(label)
     else:
@@ -295,7 +370,7 @@ def periodic_table(
     mass_fmt: str = "{:.0f}",
     label_cbar: Optional[str] = None,
     ax: Optional[Axes] = None,
-    # optional per-cell text (all off by default -> matches the reference look)
+    # optional per-cell text (number/mass/name off by default -> reference look)
     show_symbol: bool = True,
     show_value: bool = True,
     show_at_number: bool = False,
@@ -334,7 +409,9 @@ def periodic_table(
     data, values :
         Either a mapping ``{element: value}`` (element = symbol or atomic
         number) with ``values`` omitted, or two parallel sequences
-        ``periodic_table(elements, values)``.
+        ``periodic_table(elements, values)``.  NaN counts as "no value" (the
+        element is drawn as missing); duplicate elements and infinite values
+        are errors.
     cmap :
         Matplotlib colormap name or instance.
     cmap_norm :
@@ -354,11 +431,14 @@ def periodic_table(
         and ``"bottom"`` place it outside the table.  The bar is framed like an
         element cell; ``cbar_shape`` -- ``"round"`` or ``"square"`` --
         overrides the corner geometry, which otherwise follows ``tile_shape``.
-        ``cbar_kw`` is passed on to ``fig.colorbar`` for the rest
-        (``fraction``, ``pad``, ``shrink``).
+        ``cbar_kw`` is passed on to ``fig.colorbar`` for the rest: ``ticks``,
+        ``format``, ... anywhere; ``fraction``, ``pad``, ``shrink`` for the
+        outside locations (matplotlib ignores them for an inset bar like
+        ``"gap"``, whose geometry is fixed).
     ax :
         Draw into an existing axes (for composing multi-panel figures).  If
-        ``None`` a new figure/axes is created.
+        ``None`` a new figure/axes is created; when an axes is given,
+        ``figsize`` is ignored.
     show_at_number, show_at_mass, show_name :
         Optionally print the atomic number, atomic mass and full element name
         in each cell (all off by default).
@@ -395,12 +475,31 @@ def periodic_table(
     norm, label = cmap_norm, label_cbar
     show_number, show_mass = show_at_number, show_at_mass
 
+    # every cheap validation runs BEFORE the figure exists, so a caller
+    # looping over bad inputs cannot accumulate leaked open figures
     _check_savefig_kw(savepath, savefig_kw)
+    if tile_style not in ("flat", "3d"):
+        raise ValueError(
+            f"tile_style must be 'flat' or '3d', got {tile_style!r}")
+    if tile_shape not in ("round", "square"):
+        raise ValueError(
+            f"tile_shape must be 'round' or 'square', got {tile_shape!r}")
+    _check_fmt(value_fmt=value_fmt, mass_fmt=mass_fmt)
+    if colorbar:
+        _validate_cbar(cbar_loc, cbar_shape or tile_shape)
     vd = _value_dict(data, values)
     if not vd:
-        raise ValueError("no values provided")
+        raise ValueError("no values provided (NaN counts as no value)")
+
+    def _drawn(Z):
+        """Whether this element appears in the drawing, after every filter."""
+        return Z <= max_z and (Z in vd or draw_missing)
+
+    if not any(_drawn(Z) for Z in ELEMENTS):
+        raise ValueError("nothing to draw: the max_z / draw_missing filters "
+                         "exclude every element")
     n = _resolve_norm(norm, list(vd.values()))
-    cmap_obj = plt.get_cmap(cmap) if isinstance(cmap, str) else cmap
+    cmap_obj = _get_cmap(cmap)
     mappable = ScalarMappable(norm=n, cmap=cmap_obj)
     mappable.set_array([])
 
@@ -410,12 +509,6 @@ def periodic_table(
     else:
         fig = ax.figure
 
-    if tile_style not in ("flat", "3d"):
-        raise ValueError(
-            f"tile_style must be 'flat' or '3d', got {tile_style!r}")
-    if tile_shape not in ("round", "square"):
-        raise ValueError(
-            f"tile_shape must be 'round' or 'square', got {tile_shape!r}")
     tiles3d = tile_style == "3d"
     shape = tile_shape
     if tiles3d:
@@ -435,11 +528,9 @@ def periodic_table(
 
     name_texts = []                              # collected for auto-shrink-to-fit
     for Z, (sym, name, mass, grp, per) in ELEMENTS.items():
-        if Z > max_z:                            # e.g. drop the superheavies
+        if not _drawn(Z):
             continue
         has = Z in vd
-        if not has and not draw_missing:
-            continue
         c, r = _cell_pos(Z, grp, per)
         fc = mappable.to_rgba(vd[Z]) if has else missing_color
         if tiles3d:
@@ -502,7 +593,10 @@ def periodic_table(
                                       fontsize=name_fontsize, color=tc))
 
     if fblock_labels:
-        for row, lab in ((_LANTH_ROW, "La-Lu"), (_ACT_ROW, "Ac-Lr")):
+        for row, lab, lo, hi in ((_LANTH_ROW, "La-Lu", 57, 71),
+                                 (_ACT_ROW, "Ac-Lr", 89, 103)):
+            if not any(_drawn(z) for z in range(lo, hi + 1)):
+                continue                         # caption for an absent row
             ax.text(_FCOL - 1.15, row, lab, ha="center", va="center",
                     fontsize=6.5, color="0.4", style="italic")
 
@@ -515,9 +609,13 @@ def periodic_table(
             ax.text(0.05, p, str(p), ha="center", va="center",
                     fontsize=7.0, color="0.45")
 
+    # top/bottom from the rows actually drawn, so a table cut at max_z (or a
+    # sparse one with draw_missing=False) is not left floating in dead space
+    drawn_rows = [_cell_pos(Z, grp, per)[1]
+                  for Z, (_s, _n, _m, grp, per) in ELEMENTS.items() if _drawn(Z)]
     xlo = -0.75 if show_group_period else -0.3
-    ytop = -0.35 if show_group_period else 0.3
-    ybot = 10.78 if tiles3d else 10.4             # tiles cast a shadow below Ac-Lr
+    ytop = -0.35 if show_group_period else min(drawn_rows) - 0.7
+    ybot = max(drawn_rows) + (1.28 if tiles3d else 0.9)   # 3d tiles cast a shadow
     ax.set_xlim(xlo, 19)
     ax.set_ylim(ybot, ytop)                       # row 1 at the top
     ax.set_aspect("auto")
@@ -531,5 +629,10 @@ def periodic_table(
 
     result = PeriodicTablePlot(fig=fig, ax=ax, mappable=mappable)
     if savepath:
-        result.save(savepath, **savefig_kw)
+        try:
+            result.save(savepath, **savefig_kw)
+        except Exception:
+            if created:                          # don't leak the open figure
+                plt.close(fig)
+            raise
     return result

@@ -38,8 +38,9 @@ from matplotlib.transforms import Affine2D
 
 from ._elements import ELEMENTS
 from .core import (PeriodicTablePlot, _ACT_ROW, _FCOL, _LANTH_ROW,
-                   _add_colorbar, _cell_pos, _check_savefig_kw, _norm_frac,
-                   _resolve_norm, _to_Z, _value_dict)
+                   _add_colorbar, _cell_pos, _check_fmt, _check_savefig_kw,
+                   _get_cmap, _lift_frac, _norm_frac, _resolve_norm, _to_Z,
+                   _validate_cbar, _value_dict)
 
 # ------------------------------------------------------------------ palette
 # Colour families sampled from the reference poster: corals/pinks on the
@@ -360,7 +361,7 @@ _TILE_D = _TILE_W - 0.06
 def _draw_tile(ax, c: float, r: float, face, shadow_img, face_img, *,
                size: float = _TILE_W, depth: float = 0.09, rounding: float = 0.07,
                lift: float = 0.0, tilt: float = 0.0, side: float = 0.0,
-               lip_img=None, noise_img=None, edge_img=None,
+               lip_img=None, noise_img=None, edge_img=None, left_zs=None,
                bevel: bool = False, nflip=(1, 1)):
     """One 3D tile centred on column ``c``, row ``r`` (y axis is inverted).
 
@@ -378,7 +379,10 @@ def _draw_tile(ax, c: float, r: float, face, shadow_img, face_img, *,
     ``lip_img`` is a lighting gradient clipped onto the visible side lip,
     ``noise_img`` is a shared film-grain raster (``nflip`` mirrors it per
     tile so the pattern doesn't repeat), and ``bevel`` strokes a light inner
-    chamfer edge around the face.
+    chamfer edge around the face.  ``edge_img`` dims the receding side wall
+    of the LEFT neighbour (whose face level is ``left_zs``) where this block
+    occludes its light; it needs both a yawed view (``side``) and a standing
+    neighbour, and is skipped otherwise.
 
     ``side`` adds an oblique horizontal view (tilted mode only): the top
     face shifts left by ``side * height`` and the block's right side wall
@@ -541,35 +545,25 @@ def _draw_tile(ax, c: float, r: float, face, shadow_img, face_img, *,
                       yg0 + (off - grow / 2) * squash),
               zorder=zg, interpolation="bilinear", aspect="auto")
 
-    # soft occlusion along the left silhouette (rim + left edge): dims the
-    # sliver of the LEFT neighbour's receding side wall glimpsed through the
-    # inter-block gap, so the slit reads as shadow, not a broken edge.  The
-    # band is a constant horizontal offset from the silhouette, so it takes
-    # two pieces: the slanted top rim (sheared to follow it) and the vertical
-    # left edge below it, both clipped to the band itself.
-    if edge_img is not None:
-        wd = 0.085
-        band = Polygon([(x0 + ox0, yg0 - zs), (x0 + ox1, yg1 - zs),
-                        (x0 + ox1, yg1), (x0 + ox1 - wd, yg1),
-                        (x0 + ox1 - wd, yg1 - zs), (x0 + ox0 - wd, yg0 - zs)],
+    # soft occlusion of the LEFT neighbour's receding side wall, glimpsed
+    # through the inter-block gap: this block blocks its light, so that wall
+    # sliver reads as shadow rather than a broken edge.  The gradient is laid
+    # over the neighbour's own wall quad, so by construction it can never
+    # reach the neighbour's top face, the row behind, or bare background --
+    # the old fixed-width band on OUR silhouette did all three on tall tiles.
+    if edge_img is not None and side and left_zs is not None and left_zs > 0:
+        xr0 = x0 - 1.0 + w + ox1                 # neighbour's wall, front edge
+        xr1 = x0 - 1.0 + w + ox0                 # neighbour's wall, back edge
+        wall = Polygon([(xr0, yg1), (xr1, yg0), (xr1, yg0 - left_zs),
+                        (xr0, yg1 - left_zs)],
                        closed=True, facecolor="none", edgecolor="none",
                        zorder=zb + 0.9)
-        ax.add_patch(band)
+        ax.add_patch(wall)
         ei = ax.imshow(edge_img, zorder=zb + 0.95, interpolation="bilinear",
                        aspect="auto",
-                       extent=(x0 + ox1 - wd, x0 + ox1, yg1, yg1 - zs))
-        ei.set_clip_path(band)
-        if ox0 != ox1:                            # the leaning top rim
-            sh = (ox1 - ox0) / (yg1 - yg0)        # dx per dy along the rim
-            tr = (Affine2D().translate(0, -(yg0 - zs))
-                  + Affine2D.from_values(1, 0, sh, 1, 0, 0)
-                  + Affine2D().translate(0, yg0 - zs) + ax.transData)
-            ri = ax.imshow(edge_img, zorder=zb + 0.95,
-                           interpolation="bilinear", aspect="auto",
-                           extent=(x0 + ox0 - wd, x0 + ox0,
-                                   yg1 - zs, yg0 - zs))
-            ri.set_transform(tr)
-            ri.set_clip_path(band)
+                       extent=(min(xr0, xr1), max(xr0, xr1),
+                               yg1, yg0 - left_zs))
+        ei.set_clip_path(wall)
 
     # block body: ONE continuous silhouette filled with the wall colour.
     # The top face painted over it leaves the front wall, the side wall and
@@ -665,7 +659,7 @@ def periodic_table_3d(
     elements: Optional[Sequence] = None,
     missing_color: str = "#e7e3dc",
     draw_missing: bool = True,
-    background: Union[bool, str] = False,
+    background: Union[bool, str, tuple] = False,
     fblock_labels: bool = False,
     colorbar: bool = True,
     cbar_loc: str = "gap",
@@ -686,7 +680,9 @@ def periodic_table_3d(
     look: rounded corners, glossy sheen.  ``"square"`` is closer to the
     reference photograph: near-square corners, matte faces with a film-grain
     texture, a light chamfered inner edge, a lit crease above a darkening
-    side lip and larger, softer shadows.
+    side lip and larger, softer shadows.  (Through the public
+    :func:`periodicplots.periodic_table_3d` this is spelled ``tile_shape``:
+    ``"round"`` maps to ``"soft"``, ``"square"`` to ``"square"``.)
 
     ``relief_height`` (value mode only) maps the value onto the physical height of
     each block, in cell heights, and tips the whole table plane backwards so
@@ -703,6 +699,10 @@ def periodic_table_3d(
     meaningful zero; the value furthest from zero either way reaches
     ``relief_height``.
     The norm has to be able to place zero, so a log scale will not do.
+    A pit deeper than about one cell reaches under the row in front, whose
+    tiles and ground shadows then crop and overlap the pit's face -- the
+    price of depth; keep ``relief_height`` moderate for strongly negative
+    data.
 
     ``relief_norm`` drives the block heights from a normalisation of its own
     instead of the colour ``cmap_norm``.  Use it when the two should differ --
@@ -751,37 +751,48 @@ def periodic_table_3d(
     through); pass ``"gradient"`` for the soft pastel backdrop, ``True`` for
     white, or any matplotlib colour for a flat fill.
 
-    The shadows and sheen are small rasters; vector output embeds each source
-    image once alongside the vector outlines and text, so PDF/SVG work as well
-    as PNG -- just pick a ``dpi`` you're happy with.
+    The shadows and sheen are small rasters; vector output embeds them
+    unresampled (one copy per tile layer) alongside the vector outlines and
+    text, so PDF/SVG work as well as PNG -- just pick a ``dpi`` you're happy
+    with.
     """
     # public parameter names -> the internal shorthands used below
     norm, label = cmap_norm, label_cbar
     show_number, show_mass = show_at_number, show_at_mass
     height, height_norm, signed = relief_height, relief_norm, relief_signed
 
+    # every cheap validation runs BEFORE the figure exists, so a caller
+    # looping over bad inputs cannot accumulate leaked open figures
     _check_savefig_kw(savepath, savefig_kw)
+    if style not in ("soft", "square"):
+        raise ValueError(f"style must be 'soft' or 'square', got {style!r}")
+    if not 0 <= tilt < 1:
+        raise ValueError(f"tilt must be in [0, 1), got {tilt!r}")
+    _check_fmt(value_fmt=value_fmt, mass_fmt=mass_fmt)
+    if background not in (False, True, "gradient"):
+        to_rgb(background)                         # raises early on a bad colour
     if data is None and values is not None:
         raise ValueError(
             "values were given without data; pass periodic_table_3d(elements, "
             "values) or a mapping {element: value}")
     value_mode = data is not None
+    if colorbar and value_mode:
+        _validate_cbar(cbar_loc,
+                       cbar_shape or ("square" if style == "square" else "round"))
     mappable = None
     vd: dict = {}
     if value_mode:
         vd = _value_dict(data, values)
         if not vd:
-            raise ValueError("no values provided")
+            raise ValueError("no values provided (NaN counts as no value)")
         n = _resolve_norm(norm, list(vd.values()))
-        if cmap == "poster":
-            cmap_obj = POSTER_CMAP                 # works even if not registered
-        else:
-            cmap_obj = plt.get_cmap(cmap) if isinstance(cmap, str) else cmap
-        mappable = ScalarMappable(norm=n, cmap=cmap_obj)
+        mappable = ScalarMappable(norm=n, cmap=_get_cmap(cmap))
         mappable.set_array([])
 
+    if (signed or height_norm is not None) and not height:
+        raise ValueError("relief_signed / relief_norm need relief_height > 0")
     lift_max = 0.0
-    lift_norm = None
+    lift_norm, plain = None, False
     if height:
         if not value_mode:
             raise ValueError("relief_height needs data (value mode)")
@@ -790,25 +801,30 @@ def periodic_table_3d(
         if height_norm is None:
             lift_norm = mappable.norm
         elif callable(height_norm) and not isinstance(height_norm, Normalize):
-            lift_norm = height_norm                # plain function: value -> [0, 1]
+            lift_norm, plain = height_norm, True   # plain function: value -> [0, 1]
         else:
             lift_norm = _resolve_norm(height_norm, list(vd.values()))
 
     def _lift(value):
         """Signed height of one tile, in cell heights (negative sinks it)."""
-        t = _norm_frac(lift_norm, value)
-        t = 0.0 if t is None else t                # NaN/masked: sit at the base
+        t = _lift_frac(lift_norm, value, plain)
+        if t is None:                              # masked (e.g. 0 on a log scale)
+            t = t_zero if signed else 0.0
         if not signed:
             return lift_max * t
         return lift_max * (t - t_zero) / reach
 
     t_zero = reach = 0.0
     if lift_max and signed:
-        t_zero = _norm_frac(lift_norm, 0.0)
-        if t_zero is None:                         # the norm cannot place 0
+        # Unclipped on purpose: a norm whose range excludes 0 would clamp to
+        # an end and silently degrade to unsigned relief.
+        t_zero = (float(lift_norm(0.0)) if plain
+                  else _norm_frac(lift_norm, 0.0, clip=False))
+        which = "relief_norm" if height_norm is not None else "cmap_norm"
+        if t_zero is None or t_zero != t_zero or not 0.0 <= t_zero <= 1.0:
             raise ValueError(
-                "relief_signed=True needs a cmap_norm that can place 0 "
-                "(e.g. 'diverging' or a (vmin, vmax) spanning it)")
+                f"relief_signed=True needs a {which} that can place 0 inside "
+                "its range (e.g. 'diverging' or a (vmin, vmax) spanning it)")
         reach = max(t_zero, 1.0 - t_zero) or 1.0
 
     keep = None
@@ -847,6 +863,7 @@ def periodic_table_3d(
                 continue
             c, r = _cell_pos(Z, grp, per)
             placed.append((c, r, 0.09 + (_lift(vd[Z]) if Z in vd else 0.0)))
+        zs_by_pos = {(c, r): zs for c, r, zs in placed}
         x_lo = min(c - HALF - side_tilt * (r + D2) for c, r, _ in placed) - PAD
         x_hi = max(c + HALF - side_tilt * (r - D2) for c, r, _ in placed) + PAD
         if fblock_labels and any(_drawn(z) for z in range(57, 104)):
@@ -866,6 +883,7 @@ def periodic_table_3d(
                 for Z, (_s, _n, _m, grp, per) in ELEMENTS.items() if _drawn(Z)]
         xlim = (-0.35, 19.05)
         ylim = (max(rows) + 1.25, min(rows) - 0.8)  # row 1 at the top
+        zs_by_pos = {}                             # flat view: no occlusion strips
 
     if background == "gradient":
         ax.imshow(_background_image(),
@@ -878,8 +896,6 @@ def periodic_table_3d(
                                           else background),
                                edgecolor="none", zorder=0))
 
-    if style not in ("soft", "square"):
-        raise ValueError(f"style must be 'soft' or 'square', got {style!r}")
     square = style == "square"
     rounding = 0.022 if square else 0.07
     shadow_img = (_shadow_image(radius=9, alpha=0.55) if square
@@ -915,6 +931,7 @@ def periodic_table_3d(
                                     side=(side_tilt if lift_max else 0.0),
                                     rounding=rounding, lip_img=lip_img,
                                     noise_img=noise_img, edge_img=edge_img,
+                                    left_zs=zs_by_pos.get((c - 1, r)),
                                     bevel=square,
                                     nflip=(1 if Z % 2 else -1,
                                            1 if (Z >> 1) % 2 else -1))
@@ -989,19 +1006,27 @@ def periodic_table_3d(
     if savepath:
         kwargs = dict(savefig_kw)
         kwargs.setdefault("dpi", 250)
-        if str(savepath).lower().endswith((".pdf", ".svg")):
-            # vector output: embed each small source raster once, letting
-            # the viewer interpolate, instead of baking a dpi-resampled
-            # copy of every shadow/gradient into the file; also use the
-            # strongest stream compression
-            for im_ in ax.images:
-                im_.set_interpolation("none")
-            try:
-                with mpl.rc_context({"pdf.compression": 9}):
-                    result.save(savepath, **kwargs)
-            finally:
-                for im_ in ax.images:
-                    im_.set_interpolation("bilinear")
-        else:
-            result.save(savepath, **kwargs)
+        try:
+            if str(savepath).lower().endswith((".pdf", ".svg")):
+                # vector output: embed the small source rasters unresampled
+                # (one copy per tile layer), letting the viewer interpolate,
+                # instead of baking a dpi-resampled copy of each into the
+                # file; also use the strongest stream compression
+                snap = [(im_, im_.get_interpolation()) for im_ in ax.images]
+                for im_, _ in snap:
+                    im_.set_interpolation("none")
+                try:
+                    with mpl.rc_context({"pdf.compression": 9}):
+                        result.save(savepath, **kwargs)
+                finally:
+                    # restore exactly: with ax= composition the list holds
+                    # caller-owned images too, whose settings are not ours
+                    for im_, interp in snap:
+                        im_.set_interpolation(interp)
+            else:
+                result.save(savepath, **kwargs)
+        except Exception:
+            if created:                          # don't leak the open figure
+                plt.close(fig)
+            raise
     return result

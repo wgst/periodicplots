@@ -55,8 +55,8 @@ def periodic_table_3d(data=None, values=None, *, tile_style="3d",
     * ``"3d"`` -- ``tilt``, ``side_tilt``, ``font_scale``, ``background``,
       ``cbar_loc``, ``elements``: see
       :func:`periodicplots.style3d.periodic_table_3d`.
-    * ``"flat"`` -- ``depth``, ``shear``, ``base_height``, ``gap``,
-      ``wall_shade``, ``side_shade``, ``wall_fade``, ``fade_color``,
+    * ``"flat"`` -- ``relief_norm``, ``depth``, ``shear``, ``base_height``,
+      ``gap``, ``wall_shade``, ``side_shade``, ``wall_fade``, ``fade_color``,
       ``pit_color``, ``text_on_surface``, ``edge_color``, ``edge_width``,
       ``text_color``, ``show_group_period`` and the per-role ``*_fontsize``
       options: see :func:`periodicplots.relief.periodic_table_relief`.
@@ -67,6 +67,12 @@ def periodic_table_3d(data=None, values=None, *, tile_style="3d",
     if tile_style not in ("3d", "flat"):
         raise ValueError(
             f"tile_style must be '3d' or 'flat', got {tile_style!r}")
+    if "style" in kwargs:
+        # the renderer-internal spelling; passing it through would collide
+        # with the tile_shape mapping below and die in a confusing TypeError
+        raise TypeError(
+            "style is the renderer-internal option; use tile_shape='round' "
+            "(the glossy 'soft' finish) or tile_shape='square'")
     # Relief is the point of _3d, so a height is always set once there is data.
     # The two defaults differ because the projections do: "3d" tips the whole
     # table back (tilt/side_tilt), so a modest height already reads as relief,

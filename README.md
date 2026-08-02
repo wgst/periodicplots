@@ -38,7 +38,7 @@ pp.periodic_table([26, 8], [0.9, 2.7])       # or two parallel sequences
 ```
 
 Each cell shows the element symbol and its value; elements without a value are
-drawn in `missing_color`.
+drawn in `missing_color` (NaN counts as no value).
 
 ![periodicplots example](docs/example.png)
 
@@ -61,11 +61,11 @@ pp.periodic_table(slopes, cmap="RdBu_r", cmap_norm="diverging",
 | `draw_missing` | `True` | draw elements without a value |
 | `max_z` | `118` | highest atomic number drawn (`103` omits the superheavies) |
 | `tile_style` / `tile_shape` | `"flat"` / `"round"` | how a cell is drawn (below) |
-| `ax` | `None` | draw into an existing axes |
+| `ax` | `None` | draw into an existing axes (`figsize` is then ignored) |
 | `colorbar` | `True` | attach a colourbar |
 | `cbar_loc` | `"gap"` | `"gap"` (in the empty Be–B block), `"right"`, `"left"`, `"top"`, `"bottom"` |
 | `cbar_shape` | `None` | colourbar frame corners, `"round"` or `"square"`; follows `tile_shape` unless set |
-| `cbar_kw` | `None` | passed to `fig.colorbar` (`fraction`, `pad`, `shrink`, …) |
+| `cbar_kw` | `None` | passed to `fig.colorbar` (`ticks`, `format`, … anywhere; `fraction`/`pad`/`shrink` for the outside locations) |
 | `savepath` | `None` | save the figure; the extension picks the format |
 
 ## 3D tables
@@ -85,12 +85,14 @@ pp.periodic_table_3d(values, cmap_norm="diverging", relief_signed=True)
 | `relief_height` | `0.60` | height of the tallest block, in cell heights |
 | `relief_signed` | `False` | measure the relief from zero, so negative values sink into a pit |
 | `relief_norm` | `None` | drive the heights from their own normalisation instead of `cmap_norm` |
-| `tilt` / `side_tilt` | `0.20` / `0.15` | how far the table tips back, and yaws sideways |
-| `background` | `False` | `"gradient"` for a pastel backdrop, or any matplotlib colour |
-| `elements` | `None` | restrict which elements are drawn |
+| `tilt` / `side_tilt` | `0.20` / `0.15` | how far the table tips back, and yaws sideways (`tile_style="3d"` only) |
+| `background` | `False` | `"gradient"` for a pastel backdrop, or any matplotlib colour (`"3d"` only) |
+| `elements` | `None` | restrict which elements are drawn (`"3d"` only) |
 
-The default cmap here is `"poster"`, a pastel ramp registered with matplotlib —
-`cmap="poster"` (or `"poster_r"`) works in `periodic_table` and any other plot.
+With the default `tile_style="3d"` the cmap defaults to `"poster"`, a pastel
+ramp registered with matplotlib — `cmap="poster"` (or `"poster_r"`) works in
+`periodic_table` and any other plot. `tile_style="flat"` keeps `"viridis"` and
+the flat table's text defaults (value shown, number/mass hidden).
 
 ## Tile styles
 
@@ -129,6 +131,8 @@ a taller block to read as the same relief.
 ## Compose into a figure
 
 ```python
+import matplotlib.pyplot as plt
+
 fig, (axa, axb) = plt.subplots(1, 2, figsize=(15, 4))
 pp.periodic_table(gap,   ax=axa, label_cbar="$E_g$ (eV)")
 pp.periodic_table(slope, ax=axb, cmap="RdBu_r", cmap_norm="diverging")

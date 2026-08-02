@@ -35,6 +35,88 @@ def test_unknown_kwargs_are_rejected_without_savepath():
         pp.periodic_table_3d({"Fe": 1.0}, glow=True)
 
 
+def test_duplicate_elements_raise():
+    with pytest.raises(ValueError, match="duplicate"):
+        _value_dict(["Fe", "Fe"], [1.0, 2.0])
+    with pytest.raises(ValueError, match="duplicate"):
+        _value_dict({"Fe": 1.0, 26: 2.0}, None)  # symbol + its own Z
+
+
+def test_mapping_plus_values_raises():
+    with pytest.raises(TypeError, match="mapping"):
+        _value_dict({"Fe": 1.0}, [2.0])
+
+
+def test_generator_lengths_still_checked():
+    # a generator has no len(); it must not silently zip-truncate instead
+    with pytest.raises(ValueError, match="length"):
+        _value_dict(iter(["Fe", "O", "Si"]), [1.0, 2.0])
+
+
+def test_nan_counts_as_missing_and_inf_raises():
+    nan = float("nan")
+    r = pp.periodic_table({"Fe": nan, "O": 2.0, "Si": 1.0}, colorbar=False)
+    # the colour scale spans the finite values only; Fe is drawn as missing
+    assert (r.mappable.norm.vmin, r.mappable.norm.vmax) == (1.0, 2.0)
+    plt.close(r.fig)
+    with pytest.raises(ValueError, match="non-finite"):
+        pp.periodic_table({"Fe": float("inf"), "O": 2.0})
+    with pytest.raises(ValueError, match="no values"):
+        pp.periodic_table({"Fe": nan})
+
+
+def test_fractional_or_bool_keys_raise():
+    with pytest.raises(ValueError, match="integral"):
+        _to_Z(26.5)
+    with pytest.raises(TypeError, match="symbol or atomic number"):
+        _to_Z(True)
+
+
+def test_reversed_norm_tuple_raises():
+    with pytest.raises(ValueError, match="increasing"):
+        pp.periodic_table({"Fe": 1.0}, cmap_norm=(2.0, 1.0))
+
+
+def test_validation_errors_do_not_leak_figures():
+    # every one of these used to raise AFTER plt.subplots, so a caller loop
+    # accumulated open figures
+    before = set(plt.get_fignums())
+    for call in (lambda: pp.periodic_table({"Fe": 1}, tile_style="bad"),
+                 lambda: pp.periodic_table({"Fe": 1}, cbar_loc="bad"),
+                 lambda: pp.periodic_table({"Fe": 1}, cbar_shape="oval"),
+                 lambda: pp.periodic_table({"Fe": 1}, cmap_norm=(2.0, 1.0)),
+                 lambda: pp.periodic_table({"Fe": 1}, value_fmt="{:d}"),
+                 lambda: pp.periodic_table({"Fe": 1}, draw_missing=False,
+                                           max_z=1),
+                 lambda: pp.periodic_table_3d({"Fe": 1}, tile_style="flat",
+                                              cbar_loc="bad"),
+                 lambda: pp.periodic_table_3d({"Fe": 1}, cbar_loc="bad"),
+                 lambda: pp.periodic_table_3d({"Fe": 1}, relief_height=0.6,
+                                              tilt=1.0),
+                 lambda: pp.periodic_table_3d({"Fe": 1}, style="soft")):
+        with pytest.raises((ValueError, TypeError)):
+            call()
+    assert set(plt.get_fignums()) == before
+
+
+def test_gap_bar_ignores_smuggled_orientation():
+    # same policy as the location fix: the gap band's geometry is fixed, so
+    # an orientation/location inside cbar_kw must not break it
+    r = pp.periodic_table({"Fe": 1.0, "O": 2.0},
+                          cbar_kw={"orientation": "vertical",
+                                   "location": "right"})
+    bb = r.ax.child_axes[0].get_position()
+    assert bb.width > bb.height                  # still the horizontal gap band
+    plt.close(r.fig)
+
+
+def test_core_fblock_captions_and_ylim_follow_max_z():
+    r = pp.periodic_table({"Fe": 1.0}, max_z=54, colorbar=False)
+    assert not any("La" in t.get_text() for t in r.ax.texts)
+    assert r.ax.get_ylim()[0] < 7.0              # trimmed to the 5 drawn periods
+    plt.close(r.fig)
+
+
 def test_element_data_spot_checks():
     # bracketed-mass convention: the most stable isotope of each unstable
     # element (Rn once carried thoron's 220)
