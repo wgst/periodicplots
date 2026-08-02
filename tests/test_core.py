@@ -17,6 +17,32 @@ def test_two_sequence_input():
     assert _value_dict(["Fe", "O"], [1.0, 2.0]) == {26: 1.0, 8: 2.0}
 
 
+def test_mismatched_lengths_raise():
+    # zip would silently drop the unmatched tail -- a dropped element is easy
+    # to miss in a busy figure, so it must fail loudly instead
+    with pytest.raises(ValueError, match="length"):
+        _value_dict(["Fe", "O", "Si"], [1.0, 2.0])
+
+
+def test_unknown_kwargs_are_rejected_without_savepath():
+    # extra keywords are forwarded to savefig, which only runs with savepath=;
+    # without one they can only be typos or options of the other renderer
+    with pytest.raises(TypeError, match="cmap_nrom"):
+        pp.periodic_table({"Fe": 1.0}, cmap_nrom="diverging")
+    with pytest.raises(TypeError, match="tilt"):
+        pp.periodic_table_3d({"Fe": 1.0}, tile_style="flat", tilt=0.3)
+    with pytest.raises(TypeError, match="glow"):
+        pp.periodic_table_3d({"Fe": 1.0}, glow=True)
+
+
+def test_element_data_spot_checks():
+    # bracketed-mass convention: the most stable isotope of each unstable
+    # element (Rn once carried thoron's 220)
+    assert pp.ELEMENTS[86][2] == 222.0           # Rn
+    assert pp.ELEMENTS[84][2] == 209.0           # Po
+    assert pp.ELEMENTS[103][2] == 266.0          # Lr
+
+
 def test_symbol_case_insensitive():
     assert _to_Z("fe") == _to_Z("FE") == _to_Z("Fe") == 26
 

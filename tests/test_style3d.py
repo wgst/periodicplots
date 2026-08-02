@@ -243,10 +243,29 @@ def test_signed_relief_sinks_negative_tiles():
 
 
 def test_signed_needs_a_norm_that_places_zero():
+    import warnings
     from matplotlib.colors import LogNorm
-    with pytest.raises(ValueError, match="place 0"):
-        pp.periodic_table_3d({"Fe": 1.0, "O": 2.0}, cmap_norm=LogNorm(1.0, 10.0),
-                             relief_height=0.6, relief_signed=True, colorbar=False)
+    with warnings.catch_warnings():
+        warnings.simplefilter("error")           # the old path warned before raising
+        with pytest.raises(ValueError, match="place 0"):
+            pp.periodic_table_3d({"Fe": 1.0, "O": 2.0}, cmap_norm=LogNorm(1.0, 10.0),
+                                 relief_height=0.6, relief_signed=True, colorbar=False)
+
+
+def test_flat_view_limits_follow_the_drawn_rows():
+    # a table restricted to the first periods must not keep the full-table
+    # ylim and float in empty space
+    r = pp.periodic_table_3d(elements=["H", "He", "Li"], relief_height=0.0)
+    assert r.ax.get_ylim()[0] < 4.0
+    plt.close(r.fig)
+    full = pp.periodic_table_3d()
+    assert full.ax.get_ylim()[0] > 10.0          # unrestricted: unchanged
+    plt.close(full.fig)
+
+
+def test_values_without_data_raise():
+    with pytest.raises(ValueError, match="without data"):
+        pp.periodic_table_3d(values=[1.0, 2.0])
 
 
 def test_pit_geometry_replaces_the_standing_body():

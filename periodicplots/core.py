@@ -74,6 +74,11 @@ def _value_dict(data, values) -> dict:
     sequence of element keys paired with a ``values`` sequence.
     """
     if values is not None:
+        n_data = len(data) if hasattr(data, "__len__") else None
+        n_vals = len(values) if hasattr(values, "__len__") else None
+        if n_data is not None and n_vals is not None and n_data != n_vals:
+            raise ValueError(
+                f"data and values differ in length ({n_data} != {n_vals})")
         return {_to_Z(k): float(v) for k, v in zip(data, values)}
     if isinstance(data, Mapping):
         return {_to_Z(k): float(v) for k, v in data.items()}
@@ -101,6 +106,33 @@ def _resolve_norm(norm, vals):
     )
 
 
+def _norm_frac(norm, value):
+    """``norm(value)`` clipped to [0, 1], or ``None`` if it is not a number."""
+    try:
+        t = norm(float(value))
+    except Exception:
+        return None
+    if bool(getattr(t, "mask", False)):          # masked, e.g. 0 on a log scale
+        return None
+    t = float(t)
+    if t != t:                                   # NaN
+        return None
+    return min(max(t, 0.0), 1.0)
+
+
+def _check_savefig_kw(savepath, savefig_kw):
+    """Fail loudly on unrecognised keywords.
+
+    Every entry point's ``**savefig_kw`` is forwarded to ``savefig``, which
+    only runs when ``savepath`` is given -- so extra keywords without one can
+    only be typos, or options that belong to a different renderer."""
+    if savefig_kw and savepath is None:
+        raise TypeError(
+            "unexpected keyword argument(s): " + ", ".join(sorted(savefig_kw))
+            + " -- extra keywords are forwarded to savefig (with savepath=); "
+            "check for a typo, or for an option of the other tile_style")
+
+
 def _shrink_to_fit(fig, ax, texts, max_frac: float = 0.85):
     """Scale ALL the given texts by one shared factor so the widest of them fits
     within ``max_frac`` of a cell.  A single factor keeps every element name the
@@ -119,7 +151,7 @@ def _shrink_to_fit(fig, ax, texts, max_frac: float = 0.85):
             scale = cell_w / widest
             for t in texts:
                 t.set_fontsize(t.get_fontsize() * scale)
-    except Exception:
+    except (AttributeError, RuntimeError):       # no renderer to measure with
         pass
 
 
@@ -172,8 +204,7 @@ def _frame_colorbar(fig, ax, cb, cax, shape, font_scale=1.0):
         if cb.solids is not None:
             cb.solids.set_clip_path(frame)
         cb.outline.set_visible(False)
-        cb.ax.tick_params(color="0.25")
-    except Exception:
+    except (AttributeError, RuntimeError):       # no renderer to measure with
         pass
 
 
@@ -215,7 +246,7 @@ def _add_colorbar(fig, ax, mappable, *, loc="gap", label=None, cbar_kw=None,
             cw = abs(ax.transData.transform((1, 0))[0]
                      - ax.transData.transform((0, 0))[0])
             h = _GAP_THICKNESS * cw / ax.get_window_extent().height
-        except Exception:                        # no renderer: fall back to rows
+        except (AttributeError, RuntimeError):   # no renderer: fall back to rows
             h = abs(tofrac(x0, rc + half)[1] - tofrac(x0, rc - half)[1])
         cax = ax.inset_axes([min(e0[0], e1[0]), (e0[1] + e1[1]) / 2.0 - h / 2.0,
                              abs(e1[0] - e0[0]), h])
@@ -303,6 +334,9 @@ def periodic_table(
         How data values map onto the colormap (and the colourbar's range):
         ``None`` (auto min-max), ``'diverging'`` (symmetric ``TwoSlopeNorm``
         about 0), a ``(vmin, vmax)`` tuple, or a matplotlib ``Normalize``.
+        The automatic range spans every value supplied -- including elements
+        that ``max_z`` drops from the drawing -- so panels built from one
+        dataset share a scale.
     value_fmt :
         Format string for the value printed in each cell.
     label_cbar :
@@ -353,6 +387,7 @@ def periodic_table(
     norm, label = cmap_norm, label_cbar
     show_number, show_mass = show_at_number, show_at_mass
 
+    _check_savefig_kw(savepath, savefig_kw)
     vd = _value_dict(data, values)
     if not vd:
         raise ValueError("no values provided")

@@ -20,7 +20,7 @@ from .style3d import periodic_table_3d as _tiles_3d
 
 __all__ = ["periodic_table", "periodic_table_3d", "PeriodicTablePlot",
            "POSTER_CMAP", "ELEMENTS", "SYMBOL_TO_Z"]
-__version__ = "0.5.0"
+__version__ = "0.2.0"
 
 from ._elements import ELEMENTS, SYMBOL_TO_Z
 

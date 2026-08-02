@@ -43,6 +43,8 @@ from .core import (
     PeriodicTablePlot,
     _auto_text_color,
     _cell_pos,
+    _check_savefig_kw,
+    _norm_frac,
     _resolve_norm,
     _shrink_to_fit,
     _value_dict,
@@ -74,20 +76,6 @@ def _mix(c1, c2, t: float):
     return tuple(u + (v - u) * t for u, v in zip(a, b))
 
 
-def _norm_frac(norm, value):
-    """``norm(value)`` clipped to [0, 1], or ``None`` if it is not a number."""
-    try:
-        t = norm(float(value))
-    except Exception:
-        return None
-    if bool(getattr(t, "mask", False)):          # masked, e.g. 0 on a log scale
-        return None
-    t = float(t)
-    if t != t:                                   # NaN
-        return None
-    return min(max(t, 0.0), 1.0)
-
-
 def _data_per_point(fig, ax):
     """Data units per typographic point, or ``None`` if it can't be measured.
 
@@ -100,7 +88,7 @@ def _data_per_point(fig, ax):
         x1 = ax.transData.transform((1.0, 0.0))[0]
         px_per_data = abs(x1 - x0)
         return (fig.dpi / 72.0) / px_per_data if px_per_data else None
-    except Exception:
+    except (AttributeError, RuntimeError):       # no renderer to measure with
         return None
 
 
@@ -362,6 +350,7 @@ def periodic_table_relief(
     show_number, show_mass = show_at_number, show_at_mass
     height, signed = relief_height, relief_signed
 
+    _check_savefig_kw(savepath, savefig_kw)
     vd = _value_dict(data, values)
     if not vd:
         raise ValueError("no values provided")

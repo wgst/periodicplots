@@ -38,7 +38,8 @@ from matplotlib.transforms import Affine2D
 
 from ._elements import ELEMENTS
 from .core import (PeriodicTablePlot, _ACT_ROW, _FCOL, _LANTH_ROW,
-                   _add_colorbar, _cell_pos, _resolve_norm, _to_Z, _value_dict)
+                   _add_colorbar, _cell_pos, _check_savefig_kw, _norm_frac,
+                   _resolve_norm, _to_Z, _value_dict)
 
 # ------------------------------------------------------------------ palette
 # Colour families sampled from the reference poster: corals/pinks on the
@@ -348,8 +349,16 @@ def _pit_silhouette(x0, w, ox0, ox1, yg0, yg1, p, rad) -> MplPath:
 
 
 # --------------------------------------------------------------- tile drawing
+# One tile's footprint, in cell widths: the face is _TILE_W wide, the ground
+# footprint _TILE_D deep (slightly shallower, so a gap shows between rows).
+# The axis-limit code in periodic_table_3d sizes the drawn table from these
+# same numbers.
+_TILE_W = 0.94
+_TILE_D = _TILE_W - 0.06
+
+
 def _draw_tile(ax, c: float, r: float, face, shadow_img, face_img, *,
-               size: float = 0.94, depth: float = 0.09, rounding: float = 0.07,
+               size: float = _TILE_W, depth: float = 0.09, rounding: float = 0.07,
                lift: float = 0.0, tilt: float = 0.0, side: float = 0.0,
                lip_img=None, noise_img=None, edge_img=None,
                bevel: bool = False, nflip=(1, 1)):
@@ -440,7 +449,7 @@ def _draw_tile(ax, c: float, r: float, face, shadow_img, face_img, *,
     # ---- tilted-back view ----
     squash = 1.0 - tilt                           # ground foreshortening
     zs = depth + lift                             # face level: >0 stands, <0 sinks
-    d = size - 0.06                               # footprint depth < width, so
+    d = size - (_TILE_W - _TILE_D)                # footprint depth < width, so
     yg0 = (r - d / 2) * squash                    # a ground gap shows between
     yg1 = (r + d / 2) * squash                    # rows (back / front edges)
     # zorder: rows back-to-front, and within a row left-to-right, so each
@@ -717,7 +726,13 @@ def periodic_table_3d(
 
     ``elements`` optionally restricts which elements are drawn (symbols or
     atomic numbers); ``max_z`` is a simpler trailing cutoff (e.g. ``103`` to
-    omit the Rf-Og superheavies).
+    omit the Rf-Og superheavies).  Both filters affect only what is drawn:
+    filtered-out elements still count towards the colour (and height)
+    normalisation, so a zoomed table keeps the full dataset's scale.
+
+    ``mass_fmt`` defaults to two decimals here -- the poster look prints
+    precise masses -- where :func:`periodicplots.periodic_table` rounds the
+    mass to a whole number.
 
     ``cbar_loc`` places the colourbar: ``"gap"`` (default) lays it
     horizontally in the empty block between Be and B, following the table's
@@ -738,6 +753,11 @@ def periodic_table_3d(
     show_number, show_mass = show_at_number, show_at_mass
     height, height_norm, signed = relief_height, relief_norm, relief_signed
 
+    _check_savefig_kw(savepath, savefig_kw)
+    if data is None and values is not None:
+        raise ValueError(
+            "values were given without data; pass periodic_table_3d(elements, "
+            "values) or a mapping {element: value}")
     value_mode = data is not None
     mappable = None
     vd: dict = {}
@@ -769,18 +789,16 @@ def periodic_table_3d(
 
     def _lift(value):
         """Signed height of one tile, in cell heights (negative sinks it)."""
-        t = float(np.clip(lift_norm(value), 0.0, 1.0))
+        t = _norm_frac(lift_norm, value)
+        t = 0.0 if t is None else t                # NaN/masked: sit at the base
         if not signed:
             return lift_max * t
         return lift_max * (t - t_zero) / reach
 
     t_zero = reach = 0.0
     if lift_max and signed:
-        try:
-            t_zero = float(np.clip(lift_norm(0.0), 0.0, 1.0))
-        except Exception:
-            t_zero = float("nan")
-        if t_zero != t_zero:                       # NaN: the norm cannot place 0
+        t_zero = _norm_frac(lift_norm, 0.0)
+        if t_zero is None:                         # the norm cannot place 0
             raise ValueError(
                 "relief_signed=True needs a cmap_norm that can place 0 "
                 "(e.g. 'diverging' or a (vmin, vmax) spanning it)")
@@ -796,7 +814,6 @@ def periodic_table_3d(
     if elements is not None:
         keep = {_to_Z(e) for e in elements}
 
-    last_row = 9.5 if (keep is None or any(z >= 89 for z in keep)) else 7.0
     if lift_max:
         # Limits from what is actually drawn rather than a worst-case formula:
         # each block's footprint, leaned left by `side_tilt` per row of depth and
@@ -805,7 +822,8 @@ def periodic_table_3d(
         # row that reaches column 1 is period 7 -- the f-block rows behind it
         # start at column 3.
         squash = 1.0 - tilt
-        HALF, D2, PAD = 0.47, 0.44, 0.34           # tile half-width, half-depth, halo
+        # tile half-width, half-depth (from the drawn footprint), shadow halo
+        HALF, D2, PAD = _TILE_W / 2, _TILE_D / 2, 0.34
         placed = []
         for Z, (sym, name, mass, grp, per) in ELEMENTS.items():
             if Z > max_z or (keep is not None and Z not in keep):
@@ -826,8 +844,15 @@ def periodic_table_3d(
                    for c, r, zs in placed) + 0.10
         xlim, ylim = (x_lo, x_hi), (y_lo, y_hi)
     else:
+        # top/bottom from the rows actually drawn, so a restricted table
+        # (elements=..., max_z=...) is not left floating in empty space
+        rows = [_cell_pos(Z, grp, per)[1]
+                for Z, (_s, _n, _m, grp, per) in ELEMENTS.items()
+                if Z <= max_z and (keep is None or Z in keep)
+                and (not value_mode or Z in vd or draw_missing)]
         xlim = (-0.35, 19.05)
-        ylim = (10.75, 0.2)                        # row 1 at the top
+        ylim = ((max(rows) + 1.25, min(rows) - 0.8) if rows
+                else (10.75, 0.2))                 # row 1 at the top
 
     if background == "gradient":
         ax.imshow(_background_image(),
